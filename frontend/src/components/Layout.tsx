@@ -8,6 +8,7 @@ interface LayoutProps {
 const navLinks = [
   { to: '/', label: 'Home' },
   { to: '/audio', label: '🎧 Audio Analysis' },
+  { to: '/pab-demo', label: '🚨 PAB Demo' },
 ];
 
 export function Layout({ children }: LayoutProps) {
