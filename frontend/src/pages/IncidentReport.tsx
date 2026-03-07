@@ -5,6 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { DashboardHeader } from '../components/DashboardHeader';
+import { Map } from '../components/Map';
+import { fetchCaseById, fetchResidentById } from '../services/firebaseService';
+import { CaseLog, Resident } from '../types';
 
 type ReceiverType = 'police' | 'ambulance' | 'community-responders' | 'welfare-helpers';
 
@@ -20,6 +23,10 @@ export function IncidentReport() {
   const [selectedReceivers, setSelectedReceivers] = useState<ReceiverType[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [showValidation, setShowValidation] = useState(false);
+  const [caseData, setCaseData] = useState<CaseLog | null>(null);
+  const [resident, setResident] = useState<Resident | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const receiverOptions: ReceiverOption[] = [
     { id: 'ambulance', label: 'Ambulance', aiRecommended: true },
@@ -65,35 +72,46 @@ export function IncidentReport() {
     };
   }, [isDropdownOpen]);
 
-  // Mock data for draft view
-  const resident = {
-    name: 'Margaret Chen',
-    age: 78,
-    room: 'Unit 204',
-    priority: 'PRIORITY I' as const,
-    address: '123 Sunset Boulevard, Block 204',
-    postalCode: '088003',
-    latitude: 1.3521,
-    longitude: 103.8198,
-    medicalHistory: ['Hypertension', 'Type 2 Diabetes', 'Osteoarthritis'],
-    allergies: ['Penicillin', 'Shellfish'],
-    emergencyContact: {
-      name: 'David Chen (Son)',
-      phone: '+65 9123 4567'
-    },
-    coordinates: { lat: 1.3521, lng: 103.8198 }
-  };
+  // Fetch case and resident data
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!caseId) return;
+      
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Decode the caseId if it was URL encoded
+        const decodedCaseId = decodeURIComponent(caseId);
+        
+        // Fetch case data
+        const fetchedCase = await fetchCaseById(decodedCaseId);
+        if (!fetchedCase) {
+          setError('Case not found');
+          setLoading(false);
+          return;
+        }
+        setCaseData(fetchedCase);
+        
+        // Fetch resident data using residentId from case
+        const fetchedResident = await fetchResidentById(fetchedCase.residentId);
+        if (!fetchedResident) {
+          setError('Resident not found');
+          setLoading(false);
+          return;
+        }
+        setResident(fetchedResident);
+        
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching incident report data:', err);
+        setError('Failed to load incident report');
+        setLoading(false);
+      }
+    };
 
-  const callAnalysis = {
-    timestamp: new Date().toISOString(),
-    duration: '00:02:45',
-    findings: ['Labored breathing detected', 'Chest pain indicators', 'Distress in voice patterns'],
-    priority: 'PRIORITY I' as const,
-    triageSuggestion: {
-      severity: 'Cardiac Emergency',
-      units: ['Ambulance', 'Mobile ICU']
-    }
-  };
+    fetchData();
+  }, [caseId]);
 
   const priorityColors = {
     'PRIORITY I': 'bg-red-500',
@@ -107,6 +125,48 @@ export function IncidentReport() {
     return 'text-yellow-600';
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <DashboardHeader hideSearch={true} />
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          <div className="flex items-center justify-center h-64">
+            <p className="text-gray-600">Loading incident report...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !caseData || !resident) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <DashboardHeader hideSearch={true} />
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          <Button
+            variant="ghost"
+            onClick={() => navigate('/', { state: { selectedCaseId: caseId } })}
+            className="mb-4 text-gray-600 hover:text-gray-900"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Dashboard
+          </Button>
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+              <p className="text-gray-900 font-semibold">{error || 'Case not found'}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Parse medical history if it's a string
+  const medicalHistoryArray = typeof resident.medicalHistory === 'string' 
+    ? resident.medicalHistory.split(',').map(item => item.trim()).filter(Boolean)
+    : [];
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -117,7 +177,7 @@ export function IncidentReport() {
         {/* Back Button */}
         <Button
           variant="ghost"
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/', { state: { selectedCaseId: caseId } })}
           className="mb-4 text-gray-600 hover:text-gray-900"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -139,7 +199,7 @@ export function IncidentReport() {
                 </div>
                 <h1 className="text-3xl font-bold text-gray-900">Incident Report</h1>
                 <p className="text-sm text-gray-600 mt-1">
-                  {callAnalysis.triageSuggestion?.severity || 'Cardiac Emergency'} - Active Response
+                  {caseData.primaryConcern || 'Emergency Response'} - Active Response
                 </p>
               </div>
               <div className="text-right">
@@ -155,7 +215,7 @@ export function IncidentReport() {
                 </div>
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Dispatch Timestamp</p>
                 <p className="text-sm font-medium text-gray-900">
-                  {new Date(callAnalysis.timestamp).toLocaleString('en-SG', {
+                  {new Date(caseData.time).toLocaleString('en-SG', {
                     year: 'numeric',
                     month: '2-digit',
                     day: '2-digit',
@@ -164,7 +224,7 @@ export function IncidentReport() {
                     second: '2-digit',
                     hour12: false,
                     timeZone: 'Asia/Singapore'
-                  })} EST
+                  })} SGT
                 </p>
                 <Button variant="link" size="sm" className="text-blue-600 mt-1">
                   View Protocol
@@ -211,21 +271,19 @@ export function IncidentReport() {
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <AlertTriangle className="w-4 h-4 text-red-500" />
-                    <p className="text-xs text-gray-500 uppercase tracking-wide">Medical History & Allergies</p>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Medical History</p>
                   </div>
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
-                      <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                      <p className="text-sm text-gray-700">Penicillin Allergy (Severe)</p>
-                    </div>
-                    <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
-                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                      <p className="text-sm text-gray-700">Chronic Hypertension</p>
-                    </div>
-                    <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
-                      <div className="w-2 h-2 rounded-full bg-gray-400"></div>
-                      <p className="text-sm text-gray-700">Poor Angioplasty [2016]</p>
-                    </div>
+                    {medicalHistoryArray.length > 0 ? (
+                      medicalHistoryArray.map((item, index) => (
+                        <div key={index} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
+                          <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                          <p className="text-sm text-gray-700">{item}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">No medical history recorded</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -248,19 +306,14 @@ export function IncidentReport() {
                   <p className="text-sm text-gray-600">Singapore, {resident.postalCode || '088003'}</p>
                 </div>
 
-                {/* Map Placeholder */}
-                <div className="relative w-full h-48 bg-gray-200 rounded-lg overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                      <MapPin className="w-8 h-8 text-red-500 mx-auto mb-2" />
-                      <p className="text-sm text-gray-600">Map View</p>
-                      <p className="text-xs text-gray-500">Lat: {resident.latitude || '1.2794'}, Long: {resident.longitude || '103.8507'}</p>
-                    </div>
-                  </div>
-                  {/* Red pin marker overlay */}
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-full">
-                    <MapPin className="w-8 h-8 text-red-600 fill-red-500" />
-                  </div>
+                {/* Interactive Map */}
+                <div className="w-full h-48">
+                  <Map
+                    latitude={resident.latitude}
+                    longitude={resident.longitude}
+                    address={resident.address}
+                    residentName={resident.name}
+                  />
                 </div>
               </div>
             </CardContent>

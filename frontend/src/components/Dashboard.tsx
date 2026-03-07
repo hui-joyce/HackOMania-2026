@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { ResidentInfo } from './ResidentInfo';
 import { ActiveCallAnalysis } from './ActiveCallAnalysis';
 import { CaseLogsTable } from './CaseLogsTable';
@@ -7,6 +8,7 @@ import { Resident, CallAnalysis, CaseLog } from '../types';
 import { fetchResidentById, fetchCallById, fetchCases, seedSampleData } from '../services/firebaseService';
 
 export function Dashboard() {
+  const location = useLocation();
   const [resident, setResident] = useState<Resident | null>(null);
   const [callAnalysis, setCallAnalysis] = useState<CallAnalysis | null>(null);
   const [caseLogs, setCaseLogs] = useState<CaseLog[]>([]);
@@ -40,6 +42,18 @@ export function Dashboard() {
 
     loadDashboardData();
   }, []);
+
+  // Auto-select case if navigating back from incident report
+  useEffect(() => {
+    const state = location.state as { selectedCaseId?: string } | null;
+    if (state?.selectedCaseId && caseLogs.length > 0) {
+      const caseToSelect = caseLogs.find(c => c.caseId === state.selectedCaseId);
+      if (caseToSelect && (!selectedCase || selectedCase.caseId !== caseToSelect.caseId)) {
+        handleSelectCase(caseToSelect);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseLogs, location.state]);
 
   const handleContactFamily = () => {
     console.log('Contacting family...');
@@ -128,6 +142,7 @@ export function Dashboard() {
                   transcript={callAnalysis.transcript}
                   audioUrl={callAnalysis.audioUrl}
                   audioDuration={callAnalysis.audioDuration}
+                  caseId={selectedCase.caseId}
                 />
               )}
               
