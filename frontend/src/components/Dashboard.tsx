@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
-import { PatientInfo } from './PatientInfo';
+import { ResidentInfo } from './ResidentInfo';
 import { ActiveCallAnalysis } from './ActiveCallAnalysis';
 import { CaseLogsTable } from './CaseLogsTable';
 import { DashboardHeader } from './DashboardHeader';
-import { Patient, CallAnalysis, CaseLog } from '../types';
-import { fetchPatientById, fetchCallById, fetchCases, seedSampleData } from '../services/firebaseService';
+import { Resident, CallAnalysis, CaseLog } from '../types';
+import { fetchResidentById, fetchCallById, fetchCases, seedSampleData } from '../services/firebaseService';
 
 export function Dashboard() {
-  const [patient, setPatient] = useState<Patient | null>(null);
+  const [resident, setResident] = useState<Resident | null>(null);
   const [callAnalysis, setCallAnalysis] = useState<CallAnalysis | null>(null);
   const [caseLogs, setCaseLogs] = useState<CaseLog[]>([]);
   const [selectedCase, setSelectedCase] = useState<CaseLog | null>(null);
@@ -20,21 +20,14 @@ export function Dashboard() {
       try {
         setLoading(true);
         
-        // Try to fetch patient data, if it doesn't exist, seed sample data
-        let patientData = await fetchPatientById('PT001');
-        
-        if (!patientData) {
-          console.log('No data found, seeding sample data...');
+        // Check if demo data exists, if not seed sample data
+        if (!caseLogs.length) {
+          console.log('No cases found, seeding sample data...');
           await seedSampleData();
-          patientData = await fetchPatientById('PT001');
         }
         
-        // Fetch call analysis and cases
-        const callData = await fetchCallById('CALL001');
+        // Fetch cases only on initial load
         const casesData = await fetchCases();
-        
-        setPatient(patientData as Patient);
-        setCallAnalysis(callData as CallAnalysis);
         setCaseLogs(casesData);
         setError(null);
       } catch (err) {
@@ -58,30 +51,41 @@ export function Dashboard() {
     // In production, navigate/open modal
   };
 
-  const handleSelectCase = (caseLog: CaseLog) => {
+  const handleSelectCase = async (caseLog: CaseLog) => {
     setSelectedCase(caseLog);
-    // In production, fetch the analysis data for this case from API
+    try {
+      // Fetch resident data for this case
+      const residentData = await fetchResidentById(caseLog.residentId);
+      const callData = await fetchCallById('CALL001');
+      setResident(residentData as Resident);
+      setCallAnalysis(callData as CallAnalysis);
+    } catch (err) {
+      console.error('Error loading case details:', err);
+    }
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: '#137FEC' }}></div>
           <p className="text-gray-600">Loading dashboard...</p>
         </div>
       </div>
     );
   }
 
-  if (error || !patient || !callAnalysis) {
+  if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-600 mb-4">Error: {error || 'Failed to load data'}</p>
           <button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="px-4 py-2 text-white rounded-lg"
+            style={{ backgroundColor: '#137FEC' }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#0F5CCB')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#137FEC')}
           >
             Reload Dashboard
           </button>
@@ -99,24 +103,27 @@ export function Dashboard() {
 
       {/* Scrollable Main Content */}
       <div className="flex-1 overflow-y-auto pb-[60vh]">
-        <div className="p-6 max-w-7xl mx-auto">
+        <div className="p-6 max-w-7xl mx-auto space-y-6">
+          {/* Main Grid Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Left Sidebar - Patient Info */}
+            {/* Left Sidebar - Resident Info (Only show when case selected) */}
+            {selectedCase && resident && (
             <div className="lg:col-span-1">
-              <PatientInfo
-                patient={patient}
+              <ResidentInfo
+                resident={resident}
                 onContactFamily={handleContactFamily}
                 onViewHistory={handleViewHistory}
               />
             </div>
+            )}
 
             {/* Main Content */}
-            <div className="lg:col-span-3 space-y-6">
+            <div className={`space-y-6 ${selectedCase && resident ? 'lg:col-span-3' : 'lg:col-span-4'}`}>
               {/* Call Analysis - Only shown when case is selected */}
-              {selectedCase && (
+              {selectedCase && callAnalysis && (
                 <ActiveCallAnalysis
                   acousticFindings={callAnalysis.acousticFindings}
-                  patientContext={callAnalysis.patientContext}
+                  residentContext={callAnalysis.residentContext}
                   triageSuggestion={callAnalysis.triageSuggestion}
                   transcript={callAnalysis.transcript}
                   audioUrl={callAnalysis.audioUrl}
@@ -135,7 +142,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Fixed Drawer - Case Logs */}
+      {/* Case Logs */}
       <CaseLogsTable 
         caseLogs={caseLogs}
         onSelectCase={handleSelectCase}

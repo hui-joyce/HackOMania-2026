@@ -1,45 +1,45 @@
 import { db } from '../config/firebase';
 import { collection, addDoc, getDocs, getDoc, doc, query, where, writeBatch } from 'firebase/firestore';
-import { Patient, CallAnalysis, CaseLog } from '../types';
+import { Resident, CallAnalysis, CaseLog } from '../types';
 
-const PATIENTS_COLLECTION = 'residents';
+const RESIDENTS_COLLECTION = 'residents';
 const CALLS_COLLECTION = 'calls';
 const CASES_COLLECTION = 'cases';
 
-export async function fetchPatients(): Promise<Patient[]> {
+export async function fetchResidents(): Promise<Resident[]> {
   try {
-    const querySnapshot = await getDocs(collection(db, PATIENTS_COLLECTION));
-    const patients: Patient[] = [];
+    const querySnapshot = await getDocs(collection(db, RESIDENTS_COLLECTION));
+    const residents: Resident[] = [];
     querySnapshot.forEach((doc) => {
-      patients.push({ id: doc.id, ...doc.data() } as Patient);
+      residents.push({ id: doc.id, ...doc.data() } as Resident);
     });
-    return patients;
+    return residents;
   } catch (error) {
-    console.error('Error fetching patients:', error);
+    console.error('Error fetching residents:', error);
     throw error;
   }
 }
 
-export async function fetchPatientById(patientId: string): Promise<Patient | null> {
+export async function fetchResidentById(residentId: string): Promise<Resident | null> {
   try {
-    const docRef = doc(db, PATIENTS_COLLECTION, patientId);
+    const docRef = doc(db, RESIDENTS_COLLECTION, residentId);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() } as Patient;
+      return { id: docSnap.id, ...docSnap.data() } as Resident;
     }
     return null;
   } catch (error) {
-    console.error('Error fetching patient:', error);
+    console.error('Error fetching resident:', error);
     throw error;
   }
 }
 
-export async function createPatient(patient: Omit<Patient, 'id'>): Promise<string> {
+export async function createResident(resident: Omit<Resident, 'id'>): Promise<string> {
   try {
-    const docRef = await addDoc(collection(db, PATIENTS_COLLECTION), patient);
+    const docRef = await addDoc(collection(db, RESIDENTS_COLLECTION), resident);
     return docRef.id;
   } catch (error) {
-    console.error('Error creating patient:', error);
+    console.error('Error creating resident:', error);
     throw error;
   }
 }
@@ -73,9 +73,9 @@ export async function fetchCallById(callId: string): Promise<CallAnalysis | null
   }
 }
 
-export async function fetchCallsByPatient(patientId: string): Promise<CallAnalysis[]> {
+export async function fetchCallsByResident(residentId: string): Promise<CallAnalysis[]> {
   try {
-    const q = query(collection(db, CALLS_COLLECTION), where('patientId', '==', patientId));
+    const q = query(collection(db, CALLS_COLLECTION), where('residentId', '==', residentId));
     const querySnapshot = await getDocs(q);
     const calls: CallAnalysis[] = [];
     querySnapshot.forEach((doc) => {
@@ -83,7 +83,7 @@ export async function fetchCallsByPatient(patientId: string): Promise<CallAnalys
     });
     return calls;
   } catch (error) {
-    console.error('Error fetching calls by patient:', error);
+    console.error('Error fetching calls by resident:', error);
     throw error;
   }
 }
@@ -109,6 +109,21 @@ export async function fetchCases(): Promise<CaseLog[]> {
     return cases;
   } catch (error) {
     console.error('Error fetching cases:', error);
+    throw error;
+  }
+}
+
+export async function fetchCasesByResident(residentId: string): Promise<CaseLog[]> {
+  try {
+    const q = query(collection(db, CASES_COLLECTION), where('residentId', '==', residentId));
+    const querySnapshot = await getDocs(q);
+    const cases: CaseLog[] = [];
+    querySnapshot.forEach((doc) => {
+      cases.push({ caseId: doc.id, ...doc.data() } as CaseLog);
+    });
+    return cases;
+  } catch (error) {
+    console.error('Error fetching cases by resident:', error);
     throw error;
   }
 }
@@ -142,25 +157,75 @@ export async function seedSampleData(): Promise<void> {
   try {
     const batch = writeBatch(db);
 
-    // Sample Patient (Resident)
-    const patientRef = doc(collection(db, PATIENTS_COLLECTION), 'PT001');
-    batch.set(patientRef, {
-      name: 'Pauline Goh',
-      age: 64,
-      medicalHistory: 'History: Hypertension',
-      address: '3 Everton Prk',
-      phone: '(+65) 9123 4567',
-      priority: 'PRIORITY I',
-      latitude: 1.3521,
-      longitude: 103.8198,
-      familyContact: 'John Goh',
-      createdAt: new Date().toISOString(),
+    // Sample Residents 
+    const residents = [
+      {
+        id: 'PT001',
+        name: 'Pauline Goh',
+        age: 64,
+        medicalHistory: 'History: Hypertension, Previous cardiac event',
+        address: '3 Everton Prk',
+        postalCode: '287953',
+        phone: '(+65) 9123 4567',
+        priority: 'PRIORITY I',
+        latitude: 1.3521,
+        longitude: 103.8198,
+        familyContact: 'John Goh',
+      },
+      {
+        id: 'PT002',
+        name: 'Henry Tan',
+        age: 72,
+        medicalHistory: 'Diabetes, Hypertension, Arthritis',
+        address: '882 West Ave',
+        postalCode: '288632',
+        phone: '(+65) 8765 4321',
+        priority: 'PRIORITY I',
+        latitude: 1.3726,
+        longitude: 103.8489,
+        familyContact: 'Alex Tan',
+      },
+      {
+        id: 'PT003',
+        name: 'Margaret Wong',
+        age: 58,
+        medicalHistory: 'Asthma, Anxiety disorder',
+        address: '45 Skyline Dr',
+        postalCode: '291234',
+        phone: '(+65) 9876 5432',
+        priority: 'PRIORITY II',
+        latitude: 1.3410,
+        longitude: 103.7680,
+        familyContact: 'David Wong',
+      },
+      {
+        id: 'PT004',
+        name: 'Richard Lee',
+        age: 45,
+        medicalHistory: 'No significant medical history',
+        address: '123 Maple St',
+        postalCode: '284956',
+        phone: '(+65) 6123 4567',
+        priority: 'PRIORITY III',
+        latitude: 1.3589,
+        longitude: 103.9384,
+        familyContact: 'Susan Lee',
+      },
+    ];
+
+    // Add residents to batch
+    residents.forEach((resident) => {
+      const residentRef = doc(collection(db, RESIDENTS_COLLECTION), resident.id);
+      batch.set(residentRef, {
+        ...resident,
+        createdAt: new Date().toISOString(),
+      });
     });
 
-    // Sample Call Analysis
+    // Sample Call Analysis 
     const callRef = doc(collection(db, CALLS_COLLECTION), 'CALL001');
     batch.set(callRef, {
-      patientId: 'PT001',
+      residentId: 'PT001',
       timestamp: new Date().toISOString(),
       status: 'ACTIVE',
       audioUrl: null,
@@ -185,7 +250,7 @@ export async function seedSampleData(): Promise<void> {
           description: 'Background noise',
         },
       ],
-      patientContext: {
+      residentContext: {
         homeAutomation: 'Home automation reported sudden fall via floor sensor',
         livingStatus: 'Patient lives alone; wife is in care facility.',
         familyStatus: 'Wife is in care facility',
@@ -221,34 +286,38 @@ export async function seedSampleData(): Promise<void> {
       ],
     });
 
-    // Sample Cases
+    // Sample Cases 
     const sampleCases = [
       {
+        residentId: 'PT001',
         time: '14:02',
         status: 'URGENT',
-        location: '123 Maple St',
-        patient: 'John Doe',
+        location: '3 Everton Prk',
+        residentName: 'Pauline Goh',
         primaryConcern: 'Suspected MI / Fall',
       },
       {
+        residentId: 'PT002',
         time: '14:05',
         status: 'UNCERTAIN',
         location: '882 West Ave',
-        patient: 'Mary Smith',
+        residentName: 'Henry Tan',
         primaryConcern: 'Panic / Shortness of Breath',
       },
       {
-        time: '14:10',
+        residentId: 'PT003',
+        time: '13:30',
         status: 'NON-URGENT',
-        location: 'Public Park Sect. 4',
-        patient: 'Unknown',
-        primaryConcern: 'Public Nuisance',
+        location: '45 Skyline Dr',
+        residentName: 'Margaret Wong',
+        primaryConcern: 'Anxiety episode',
       },
       {
+        residentId: 'PT004',
         time: '14:12',
         status: 'URGENT',
-        location: '45 Skyline Dr',
-        patient: 'David Miller',
+        location: '123 Maple St',
+        residentName: 'Richard Lee',
         primaryConcern: 'Severe Allergic Reaction',
       },
     ];

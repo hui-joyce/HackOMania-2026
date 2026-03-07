@@ -26,9 +26,10 @@ export function DashboardHeader({ currentUser }: DashboardHeaderProps) {
               key={tab}
               className={`px-4 py-2 text-sm font-medium transition-colors ${
                 tab === 'Dashboard'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  ? 'border-b-2 text-white'
                   : 'text-gray-600 hover:text-gray-800'
               }`}
+              style={tab === 'Dashboard' ? { borderColor: '#137FEC', color: '#137FEC' } : {}}
             >
               {tab}
             </button>

@@ -5,13 +5,13 @@ import { Badge } from './ui/Badge';
 import { Map } from './Map';
 import { Resident } from '../types';
 
-interface PatientInfoProps {
+interface ResidentInfoProps {
   resident: Resident;
   onContactFamily?: () => void;
   onViewHistory?: () => void;
 }
 
-export function PatientInfo({ resident, onContactFamily, onViewHistory }: PatientInfoProps) {
+export function ResidentInfo({ resident, onContactFamily, onViewHistory }: ResidentInfoProps) {
   return (
     <div className="w-full max-w-sm space-y-6">
       {/* Priority Card */}

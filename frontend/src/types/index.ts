@@ -1,4 +1,4 @@
-export interface Patient {
+export interface Resident {
   id: string;
   name: string;
   age: number;
@@ -8,6 +8,7 @@ export interface Patient {
   priority: 'PRIORITY I' | 'PRIORITY II' | 'PRIORITY III';
   latitude?: number;
   longitude?: number;
+  postalCode?: string;
   familyContact?: string;
 }
 
@@ -19,7 +20,7 @@ export interface AcousticFinding {
   icon?: string;
 }
 
-export interface PatientContext {
+export interface ResidentContext {
   homeAutomation?: string;
   livingStatus: string;
   familyStatus: string;
@@ -48,21 +49,22 @@ export interface TranscriptEntry {
 
 export interface CaseLog {
   caseId: string;
+  residentId: string;
   time: string;
   status: 'URGENT' | 'UNCERTAIN' | 'NON-URGENT';
   location: string;
-  patient: string;
+  residentName: string;
   primaryConcern: string;
   action?: string;
 }
 
 export interface CallAnalysis {
   id: string;
-  patientId: string;
+  residentId: string;
   timestamp: string;
   status: 'ACTIVE' | 'COMPLETED' | 'PENDING';
   acousticFindings: AcousticFinding[];
-  patientContext: PatientContext;
+  residentContext: ResidentContext;
   triageSuggestion: TriageSuggestion;
   transcript: TranscriptEntry[];
   caseLogs?: CaseLog[];

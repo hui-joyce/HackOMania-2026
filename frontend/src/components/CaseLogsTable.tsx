@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { CaseLog } from '../types';
-import { CheckCircle2 } from 'lucide-react';
 
 interface CaseLogsTableProps {
   caseLogs: CaseLog[];
@@ -21,15 +20,25 @@ export function CaseLogsTable({
   selectedCaseId,
   filter = 'all' 
 }: CaseLogsTableProps) {
-  const [activeFilter, setActiveFilter] = useState<string>(filter);
+  const [activeFilters, setActiveFilters] = useState<string[]>(filter === 'all' ? [] : [filter]);
+  const [activeTab, setActiveTab] = useState<'Active' | 'Archived'>('Active');
+  const [archivedCaseIds, setArchivedCaseIds] = useState<Set<string>>(new Set());
   const [drawerHeight, setDrawerHeight] = useState(MID_HEIGHT);
   const [isDragging, setIsDragging] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
 
+  const filteredByArchive = caseLogs.filter((log) => {
+    if (activeTab === 'Active') {
+      return !archivedCaseIds.has(log.caseId);
+    } else {
+      return archivedCaseIds.has(log.caseId);
+    }
+  });
+
   const filteredLogs =
-    activeFilter === 'all'
-      ? caseLogs
-      : caseLogs.filter((log) => log.status === activeFilter);
+    activeFilters.length === 0
+      ? filteredByArchive
+      : filteredByArchive.filter((log) => activeFilters.includes(log.status));
 
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -45,7 +54,12 @@ export function CaseLogsTable({
   };
 
   const countByStatus = (status: string) => {
-    return caseLogs.filter((log) => log.status === status).length;
+    return filteredByArchive.filter((log) => log.status === status).length;
+  };
+
+  const handleResolveCase = (caseId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setArchivedCaseIds(prev => new Set(prev).add(caseId));
   };
 
   const handleRowClick = (caseLog: CaseLog) => {
@@ -121,8 +135,9 @@ export function CaseLogsTable({
           {['Active', 'Archived'].map((tab) => (
             <Button
               key={tab}
-              variant={tab === 'Active' ? 'default' : 'outline'}
+              variant={tab === activeTab ? 'default' : 'outline'}
               size="sm"
+              onClick={() => setActiveTab(tab as 'Active' | 'Archived')}
             >
               {tab}
             </Button>
@@ -141,11 +156,17 @@ export function CaseLogsTable({
               { label: 'Non-Urgent', status: 'NON-URGENT' },
             ].map((filterOption) => {
               const count = countByStatus(filterOption.status);
-              const isActive = activeFilter === filterOption.status;
+              const isActive = activeFilters.includes(filterOption.status);
               return (
                 <Button
                   key={filterOption.status}
-                  onClick={() => setActiveFilter(isActive ? 'all' : filterOption.status)}
+                  onClick={() => {
+                    setActiveFilters(prev =>
+                      prev.includes(filterOption.status)
+                        ? prev.filter(f => f !== filterOption.status)
+                        : [...prev, filterOption.status]
+                    );
+                  }}
                   variant={isActive ? 'default' : 'outline'}
                   size="sm"
                 >
@@ -164,7 +185,7 @@ export function CaseLogsTable({
                   <th className="text-left py-3 px-3 font-semibold text-gray-700">TIME</th>
                   <th className="text-left py-3 px-3 font-semibold text-gray-700">STATUS</th>
                   <th className="text-left py-3 px-3 font-semibold text-gray-700">LOCATION</th>
-                  <th className="text-left py-3 px-3 font-semibold text-gray-700">PATIENT</th>
+                  <th className="text-left py-3 px-3 font-semibold text-gray-700">RESIDENT</th>
                   <th className="text-left py-3 px-3 font-semibold text-gray-700">PRIMARY CONCERN</th>
                   <th className="text-left py-3 px-3 font-semibold text-gray-700 w-16">ACTIONS</th>
                 </tr>
@@ -176,11 +197,12 @@ export function CaseLogsTable({
                     onClick={() => handleRowClick(log)}
                     className={`cursor-pointer border-b border-gray-100 transition-colors ${
                       selectedCaseId === log.caseId
-                        ? 'bg-blue-50 hover:bg-blue-100'
+                        ? 'hover:bg-gray-100'
                         : 'hover:bg-gray-50'
                     }`}
+                    style={{ backgroundColor: selectedCaseId === log.caseId ? 'rgba(19, 127, 236, 0.1)' : 'transparent' }}
                   >
-                    <td className="py-3 px-3 font-mono text-blue-600 text-sm">{log.caseId}</td>
+                    <td className="py-3 px-3 font-mono text-sm" style={{ color: '#137FEC' }}>{log.caseId}</td>
                     <td className="py-3 px-3 text-gray-600 text-sm">{log.time}</td>
                     <td className="py-3 px-3">
                       <Badge variant={getStatusVariant(log.status)}>
@@ -188,19 +210,24 @@ export function CaseLogsTable({
                       </Badge>
                     </td>
                     <td className="py-3 px-3 text-gray-600 text-sm">{log.location}</td>
-                    <td className="py-3 px-3 text-gray-600 text-sm">{log.patient}</td>
+                    <td className="py-3 px-3 text-gray-600 text-sm">{log.residentName}</td>
                     <td className="py-3 px-3 text-gray-600 text-sm">{log.primaryConcern}</td>
                     <td className="py-3 px-3">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-blue-600 hover:text-blue-700 text-xs"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                      </Button>
+                      {activeTab === 'Active' ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs font-medium text-white px-3 py-1"
+                          style={{ backgroundColor: '#10B981' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#059669')}
+                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#10B981')}
+                          onClick={(e) => handleResolveCase(log.caseId, e)}
+                        >
+                          Resolve
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-gray-500">Archived</span>
+                      )}
                     </td>
                   </tr>
                 ))}
