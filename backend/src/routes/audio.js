@@ -60,7 +60,6 @@ function flagKeywords(text) {
 
 let classifierPipeline = null;
 let emotionClassifierPipeline = null;
-let emotionClassifierPipeline = null;
 let modelsLoading = false;
 let modelsLoaded = false;
 
@@ -115,26 +114,8 @@ async function loadModels() {
         console.log('[Audio] Model loading sequence complete.');
     } catch (err) {
         console.error('[Audio] Critical failure in model loading:', err);
-        console.error('[Audio] Critical failure in model loading:', err);
         modelsLoading = false;
     }
-}
-
-/**
- * Maps raw model labels to user-friendly categories.
- */
-function mapEmotionLabel(label) {
-    const map = {
-        'ANG': 'Angry',
-        'CAL': 'Normal/Calm',
-        'DIS': 'Uncertain',
-        'FEA': 'Fearful',
-        'HAP': 'Happy',
-        'NEU': 'Normal/Calm',
-        'SAD': 'Sad',
-        'SUR': 'Uncertain'
-    };
-    return map[label] || label;
 }
 
 /**
@@ -160,22 +141,16 @@ loadModels();
 // Routes
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Routes
-// ---------------------------------------------------------------------------
-
 /**
  * GET /api/audio/status
  */
 router.get('/status', (req, res) => {
-    res.json({ ready: modelsLoaded && groq !== null });
     res.json({ ready: modelsLoaded && groq !== null });
 });
 
 /**
  * POST /api/audio/classification
  * Body: { audio: number[] }  (Float32 PCM at 16kHz)
- * Returns top-10 audio classification labels + GCS storage URL.
  * Returns top-10 audio classification labels + GCS storage URL.
  */
 router.post('/classification', async (req, res) => {
@@ -195,10 +170,6 @@ router.post('/classification', async (req, res) => {
         console.log('[Audio] Classification result (top 10):', top10);
 
         res.json({ results: top10 });
-        const top10 = result.slice(0, 10);
-        console.log('[Audio] Classification result (top 10):', top10);
-
-        res.json({ results: top10 });
     } catch (err) {
         console.error('[Audio] Classification error:', err);
         res.status(500).json({ error: err.message });
@@ -214,17 +185,9 @@ router.post('/classification', async (req, res) => {
  *     flags: { urgency: {word,count}[], emotions: {word,count}[] },
  *     gcsUrl: string | null
  *   }
- * Returns:
- *   {
- *     text: string,
- *     flags: { urgency: {word,count}[], emotions: {word,count}[] },
- *     gcsUrl: string | null
- *   }
  */
 router.post('/transcription', async (req, res) => {
     try {
-        if (!groq) {
-            return res.status(503).json({ error: 'Groq API key not configured.' });
         if (!groq) {
             return res.status(503).json({ error: 'Groq API key not configured.' });
         }
