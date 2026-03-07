@@ -1,6 +1,7 @@
 import { Bell, Settings, Search } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/Button';
+import { getResidentImagePath } from '../utils/imageUtils';
 
 interface DashboardHeaderProps {
   currentUser?: {
@@ -14,6 +15,7 @@ interface DashboardHeaderProps {
 export function DashboardHeader({ currentUser, hideSearch = false }: DashboardHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const userImagePath = currentUser?.avatar || getResidentImagePath(currentUser?.name || 'David Lee');
 
   const tabs = [
     { name: 'Dashboard', path: '/' },
@@ -31,24 +33,24 @@ export function DashboardHeader({ currentUser, hideSearch = false }: DashboardHe
   const currentTab = getCurrentTab();
 
   return (
-    <header className="bg-white border-b border-gray-200 py-4 px-6">
-      <div className="max-w-full mx-auto flex items-center justify-between gap-6">
+    <header className="bg-white border-b border-gray-200">
+      <div className="max-w-full mx-auto flex items-center px-6 py-4 gap-6">
         {/* Logo and Brand */}
         <div className="flex items-center gap-2">
           <img src="/senticare-ai.png" alt="SentiCare AI" className="w-10 h-10 rounded-full object-cover" />
           <h1 className="text-xl font-bold text-gray-800">SentiCare AI</h1>
         </div>
 
-        {/* Navigation Tabs */}
-        <nav className="hidden md:flex items-center gap-1">
+        {/* Navigation Tabs - Prominent on the left */}
+        <nav className="flex items-center gap-0 border-l border-gray-200 pl-4 ml-2">
           {tabs.map((tab) => (
             <button
               key={tab.name}
               onClick={() => navigate(tab.path)}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
                 currentTab === tab.name
-                  ? 'border-b-2 text-white'
-                  : 'text-gray-600 hover:text-gray-800'
+                  ? 'text-white'
+                  : 'text-gray-600 hover:text-gray-800 border-transparent'
               }`}
               style={currentTab === tab.name ? { borderColor: '#137FEC', color: '#137FEC' } : {}}
             >
@@ -57,9 +59,12 @@ export function DashboardHeader({ currentUser, hideSearch = false }: DashboardHe
           ))}
         </nav>
 
+        {/* Spacer */}
+        <div className="flex-1" />
+
         {/* Search Bar */}
         {!hideSearch && (
-          <div className="flex-1 max-w-md hidden lg:flex">
+          <div className="hidden lg:block">
             <div className="relative w-full">
               <input
                 type="text"
@@ -72,7 +77,7 @@ export function DashboardHeader({ currentUser, hideSearch = false }: DashboardHe
         )}
 
         {/* Right Actions */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 ml-4">
           {/* Notifications */}
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="w-6 h-6 text-gray-600" />
@@ -90,7 +95,7 @@ export function DashboardHeader({ currentUser, hideSearch = false }: DashboardHe
               <p className="text-sm font-semibold text-gray-800">{currentUser?.name || 'David Lee'}</p>
               <p className="text-xs text-gray-500">{currentUser?.role || 'Lead Dispatcher'}</p>
             </div>
-            <img src="/david.png" alt={currentUser?.name || 'David Lee'} className="w-15 h-15 rounded-full object-cover" />
+            <img src={userImagePath} alt={currentUser?.name || 'David Lee'} className="w-15 h-15 rounded-full object-cover" />
           </div>
         </div>
       </div>
