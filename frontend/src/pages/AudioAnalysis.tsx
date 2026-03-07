@@ -226,17 +226,7 @@ export function AudioAnalysis() {
           </div>
           <div className="px-6 py-4">
             {state.classLoading ? (
-<<<<<<< HEAD
-              <div className="flex items-center gap-3 text-gray-500 text-sm">
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none" style={{ color: '#137FEC' }}>
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
-                Classifying audio…
-              </div>
-=======
               <Spinner color="text-blue-500" label="Classifying audio…" />
->>>>>>> c3277341f17d94bd012c31cd5cf837af94e6ba5e
             ) : (
               <ul className="space-y-2">
                 {state.classification?.map((r) => (

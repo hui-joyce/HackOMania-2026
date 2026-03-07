@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ArrowDown, ArrowUp, TrendingUp, Users, AlertCircle, RefreshCw, AlertTriangle } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
+import { Card, CardContent, CardHeader, CardTitle, Button } from '../components/ui';
 import { DashboardHeader } from '../components/DashboardHeader';
 import {
   fetchAnalyticsOverview,
@@ -186,10 +185,7 @@ export function Analytics() {
                 {isRefreshing ? 'Refreshing...' : 'Refresh'}
               </Button>
               <Button
-                className="text-white"
-                style={{ backgroundColor: '#137FEC' }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#0F5CCB')}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#137FEC')}
+                className="bg-[#137FEC] text-white hover:bg-[#0F5CCB]"
               >
                 Export Report
               </Button>

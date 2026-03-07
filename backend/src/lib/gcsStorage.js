@@ -78,9 +78,14 @@ async function uploadAudioToGCS(float32Data, prefix = 'audio') {
             metadata: { cacheControl: 'no-cache' },
         });
 
-        const gcsUrl = `gs://${bucketName}/${filename}`;
-        console.log(`[GCS] Uploaded: ${gcsUrl}`);
-        return gcsUrl;
+        const [signedUrl] = await file.getSignedUrl({
+            version: 'v4',
+            action: 'read',
+            expires: Date.now() + 7 * 24 * 60 * 60 * 1000 // 7 days
+        });
+
+        console.log(`[GCS] Uploaded and Signed: ${filename}`);
+        return signedUrl;
     } catch (err) {
         console.error('[GCS] Upload failed:');
         console.error('  Code   :', err.code);
