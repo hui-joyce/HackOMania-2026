@@ -7,7 +7,7 @@ interface CaseLogsTableProps {
   caseLogs: CaseLog[];
   onSelectCase?: (caseLog: CaseLog) => void;
   selectedCaseId?: string;
-  filter?: 'URGENT' | 'UNCERTAIN' | 'NON-UNCERTAIN' | 'all';
+  filter?: 'URGENT' | 'UNCERTAIN' | 'NON-URGENT' | 'all';
 }
 
 const MIN_HEIGHT = 64; // Header only
