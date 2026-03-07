@@ -6,6 +6,7 @@ import { AudioAnalysis } from './pages/AudioAnalysis';
 import { Analytics } from './pages/Analytics';
 import { PABDemo } from './pages/PABDemo';
 import { Audit } from './pages/Audit';
+import { IncidentReport } from './pages/IncidentReport';
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/pab-demo" element={<PABDemo />} />
           <Route path="/audit" element={<Audit />} />
+          <Route path="/incident-report/:caseId" element={<IncidentReport />} />
         </Routes>
       </Layout>
     </BrowserRouter>
