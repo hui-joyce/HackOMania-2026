@@ -474,7 +474,7 @@ function AlertsByUrgencyChart({ data }: { data: AlertsByUrgency[] }) {
         };
 
         const chartJson = encodeURIComponent(JSON.stringify(chartConfig));
-        const url = `https://quickchart.io/chart?c=${chartJson}`;
+        const url = `https://quickchart.io/chart?c=${chartJson}&width=800&height=400`;
         setChartUrl(url);
       } catch (err) {
         console.error('Error generating chart:', err);
@@ -491,7 +491,7 @@ function AlertsByUrgencyChart({ data }: { data: AlertsByUrgency[] }) {
   }
 
   return chartUrl ? (
-    <img src={chartUrl} alt="Alerts by Urgency" className="w-full h-auto" />
+    <img src={chartUrl} alt="Alerts by Urgency" className="w-full mx-auto h-auto" />
   ) : (
     <div className="h-64 flex items-center justify-center text-gray-500">Failed to load chart</div>
   );
@@ -539,7 +539,7 @@ function ResponseTimeTrendChart({ data }: { data: ResponseTime[] }) {
         };
 
         const chartJson = encodeURIComponent(JSON.stringify(chartConfig));
-        const url = `https://quickchart.io/chart?c=${chartJson}`;
+        const url = `https://quickchart.io/chart?c=${chartJson}&width=900&height=350`;
         setChartUrl(url);
       } catch (err) {
         console.error('Error generating chart:', err);
@@ -556,7 +556,7 @@ function ResponseTimeTrendChart({ data }: { data: ResponseTime[] }) {
   }
 
   return chartUrl ? (
-    <img src={chartUrl} alt="Response Time Trends" className="w-full h-auto" />
+    <img src={chartUrl} alt="Response Time Trends" className="w-full mx-auto h-auto" />
   ) : (
     <div className="h-64 flex items-center justify-center text-gray-500">Failed to load chart</div>
   );
@@ -569,6 +569,7 @@ function StatusDistributionChart({ data }: { data: StatusDistribution }) {
   useEffect(() => {
     const generateChart = async () => {
       try {
+        const total = data.URGENT + data.UNCERTAIN + data['NON-URGENT'];
         const chartConfig = {
           type: 'doughnut',
           data: {
@@ -577,21 +578,47 @@ function StatusDistributionChart({ data }: { data: StatusDistribution }) {
               {
                 data: [data.URGENT, data.UNCERTAIN, data['NON-URGENT']],
                 backgroundColor: ['#FF6B6B', '#FFA500', '#137FEC'],
+                borderWidth: 2,
+                borderColor: '#ffffff',
               },
             ],
           },
           options: {
             responsive: true,
+            maintainAspectRatio: true,
+            layout: {
+              padding: 20,
+            },
             plugins: {
               legend: {
                 position: 'bottom',
+                labels: {
+                  font: {
+                    size: 14,
+                  },
+                  padding: 15,
+                  usePointStyle: true,
+                },
+              },
+              datalabels: {
+                display: true,
+                color: '#fff',
+                font: {
+                  size: 16,
+                  weight: 'bold',
+                },
+                formatter: (value: number) => {
+                  if (value === 0) return '';
+                  const percentage = ((value / total) * 100).toFixed(1);
+                  return `${percentage}%`;
+                },
               },
             },
           },
         };
 
         const chartJson = encodeURIComponent(JSON.stringify(chartConfig));
-        const url = `https://quickchart.io/chart?c=${chartJson}`;
+        const url = `https://quickchart.io/chart?c=${chartJson}&width=500&height=500`;
         setChartUrl(url);
       } catch (err) {
         console.error('Error generating chart:', err);
@@ -604,12 +631,14 @@ function StatusDistributionChart({ data }: { data: StatusDistribution }) {
   }, [data]);
 
   if (loading) {
-    return <div className="h-64 flex items-center justify-center text-gray-500">Loading chart...</div>;
+    return <div className="h-80 flex items-center justify-center text-gray-500">Loading chart...</div>;
   }
 
   return chartUrl ? (
-    <img src={chartUrl} alt="Status Distribution" className="w-full h-auto" />
+    <div className="flex justify-center">
+      <img src={chartUrl} alt="Status Distribution" className="w-auto h-auto max-w-md" />
+    </div>
   ) : (
-    <div className="h-64 flex items-center justify-center text-gray-500">Failed to load chart</div>
+    <div className="h-80 flex items-center justify-center text-gray-500">Failed to load chart</div>
   );
 }
