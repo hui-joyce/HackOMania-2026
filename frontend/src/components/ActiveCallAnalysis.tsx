@@ -1,5 +1,6 @@
-import { Volume2, User, AlertTriangle, Play, Pause, Volume, Music, Zap, Radio, Waves } from 'lucide-react';
+import { Volume2, User, AlertTriangle, Play, Pause, Volume, Music, Zap, Radio, Waves, FileText } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
@@ -12,6 +13,7 @@ interface ActiveCallAnalysisProps {
   transcript: TranscriptEntry[];
   audioUrl?: string; // Dynamic audio file URL from API
   audioDuration?: number; // Audio duration in seconds (optional)
+  caseId?: string; // Case ID for navigation to incident report
 }
 
 export function ActiveCallAnalysis({
@@ -21,7 +23,9 @@ export function ActiveCallAnalysis({
   transcript,
   audioUrl,
   audioDuration,
+  caseId,
 }: ActiveCallAnalysisProps) {
+  const navigate = useNavigate();
   // Helper function to convert seconds to mm:ss format
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -338,9 +342,15 @@ export function ActiveCallAnalysis({
               </div>
             </div>
 
-            <Button variant="default" className="w-full font-bold shadow-sm" style={{ backgroundColor: '#137FEC' }}>
-              <AlertTriangle className="w-4 h-4 mr-2" />
-              Dispatch Units
+            <Button 
+              variant="default" 
+              size="sm" 
+              className="w-full"
+              onClick={() => caseId && navigate(`/incident-report/${encodeURIComponent(caseId)}`)}
+              disabled={!caseId}
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Generate Report
             </Button>
           </div>
         </Card>
