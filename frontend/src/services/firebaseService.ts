@@ -113,9 +113,9 @@ export async function fetchCases(): Promise<CaseLog[]> {
     const cases: CaseLog[] = [];
     querySnapshot.forEach((doc) => {
       const data = doc.data();
-      cases.push({
+      cases.push({ 
         caseId: data.caseId || doc.id, // Use caseId field if exists, otherwise use document ID
-        ...data
+        ...data 
       } as CaseLog);
     });
     return cases;
@@ -128,7 +128,7 @@ export async function fetchCases(): Promise<CaseLog[]> {
 export function subscribeToCases(callback: (cases: CaseLog[]) => void): () => void {
   const q = query(
     collection(db, CASES_COLLECTION),
-    orderBy('createdAt', 'desc')
+    orderBy('timestamp', 'desc')
   );
 
   return onSnapshot(
@@ -153,9 +153,9 @@ export async function fetchCasesByResident(residentId: string): Promise<CaseLog[
     const cases: CaseLog[] = [];
     querySnapshot.forEach((doc) => {
       const data = doc.data();
-      cases.push({
+      cases.push({ 
         caseId: data.caseId || doc.id, // Use caseId field if exists, otherwise use document ID
-        ...data
+        ...data 
       } as CaseLog);
     });
     return cases;
@@ -172,21 +172,21 @@ export async function fetchCaseById(caseId: string): Promise<CaseLog | null> {
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
-      return {
-        caseId: data.caseId || docSnap.id,
-        ...data
+      return { 
+        caseId: data.caseId || docSnap.id, 
+        ...data 
       } as CaseLog;
     }
-
+    
     // If not found by document ID, query by caseId field
     const q = query(collection(db, CASES_COLLECTION), where('caseId', '==', caseId));
     const querySnapshot = await getDocs(q);
-
+    
     if (!querySnapshot.empty) {
       const doc = querySnapshot.docs[0];
       return { caseId: doc.data().caseId, ...doc.data() } as CaseLog;
     }
-
+    
     return null;
   } catch (error) {
     console.error('Error fetching case:', error);
@@ -198,14 +198,14 @@ export async function createCase(caseLog: Omit<CaseLog, 'caseId'>): Promise<stri
   try {
     // Generate a unique case ID
     const caseId = generateCaseId();
-
+    
     // Create the case document with the generated caseId
     const caseWithId = {
       ...caseLog,
       caseId,
       createdAt: new Date().toISOString(),
     };
-
+    
     const docRef = await addDoc(collection(db, CASES_COLLECTION), caseWithId);
     console.log('Case created with ID:', caseId, 'Document ID:', docRef.id);
     return caseId; // Return the caseId instead of docRef.id
@@ -219,15 +219,15 @@ export async function createCase(caseLog: Omit<CaseLog, 'caseId'>): Promise<stri
 export async function clearAndReseedData(): Promise<void> {
   try {
     console.log('Clearing existing cases...');
-
+    
     // Delete all existing cases
     const casesSnapshot = await getDocs(collection(db, CASES_COLLECTION));
     const deletePromises = casesSnapshot.docs.map(doc => deleteDoc(doc.ref));
     await Promise.all(deletePromises);
-
+    
     console.log('Reseeding sample data...');
     await seedSampleData();
-
+    
     console.log('Database cleared and reseeded successfully!');
   } catch (error) {
     console.error('Error clearing and reseeding data:', error);
@@ -410,7 +410,7 @@ export async function seedSampleData(): Promise<void> {
     ];
 
     sampleCases.forEach((caseData, index) => {
-      const caseId = `#EM-2026-${89 + index * 3}`;
+      const caseId = `#EM-2024-${89 + index * 3}`;
       const caseRef = doc(
         collection(db, CASES_COLLECTION),
         caseId

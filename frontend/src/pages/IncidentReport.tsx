@@ -6,8 +6,8 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { DashboardHeader } from '../components/DashboardHeader';
 import { Map } from '../components/Map';
-import { fetchCaseById, fetchResidentById } from '../services/firebaseService';
-import { CaseLog, Resident } from '../types';
+import { fetchCaseById, fetchResidentById, fetchCallById } from '../services/firebaseService';
+import { CaseLog, Resident, CallAnalysis } from '../types';
 
 type ReceiverType = 'police' | 'ambulance' | 'community-responders' | 'welfare-helpers';
 
@@ -25,14 +25,18 @@ export function IncidentReport() {
   const [showValidation, setShowValidation] = useState(false);
   const [caseData, setCaseData] = useState<CaseLog | null>(null);
   const [resident, setResident] = useState<Resident | null>(null);
+  const [callAnalysis, setCallAnalysis] = useState<CallAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [aiRecommendations, setAiRecommendations] = useState<ReceiverType[]>([]);
+  const [aiDescription, setAiDescription] = useState<string>('');
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
 
   const receiverOptions: ReceiverOption[] = [
-    { id: 'ambulance', label: 'Ambulance', aiRecommended: true },
-    { id: 'police', label: 'Police', aiRecommended: false },
-    { id: 'community-responders', label: 'Community Responders', aiRecommended: true },
-    { id: 'welfare-helpers', label: 'Welfare Helpers', aiRecommended: false },
+    { id: 'ambulance', label: 'Ambulance', aiRecommended: aiRecommendations.includes('ambulance') },
+    { id: 'police', label: 'Police', aiRecommended: aiRecommendations.includes('police') },
+    { id: 'community-responders', label: 'Community Responders', aiRecommended: aiRecommendations.includes('community-responders') },
+    { id: 'welfare-helpers', label: 'Welfare Helpers', aiRecommended: aiRecommendations.includes('welfare-helpers') },
   ];
 
   const toggleReceiver = (receiverId: ReceiverType) => {
@@ -101,6 +105,16 @@ export function IncidentReport() {
           return;
         }
         setResident(fetchedResident);
+
+        // Fetch call analysis data for AI recommendations using the caseId
+        // Backend stores call analysis with the same document ID as the case
+        const callData = await fetchCallById(decodedCaseId);
+        if (callData) {
+          console.log('[IncidentReport] Loaded call analysis:', callData);
+          setCallAnalysis(callData);
+        } else {
+          console.warn('[IncidentReport] No call analysis found for case:', decodedCaseId);
+        }
         
         setLoading(false);
       } catch (err) {
@@ -112,6 +126,65 @@ export function IncidentReport() {
 
     fetchData();
   }, [caseId]);
+
+  // Fetch AI recommendations when call analysis is available
+  useEffect(() => {
+    const getAiRecommendations = async () => {
+      if (!callAnalysis || !caseData) return;
+      
+      try {
+        setLoadingRecommendations(true);
+        
+        console.log('[AI-Dispatch] Call analysis data:', callAnalysis);
+        
+        // Prepare data for AI API
+        const transcript = callAnalysis.transcript
+          .map(t => t.translatedText || t.originalText)
+          .join(' ');
+        
+        console.log('[AI-Dispatch] Extracted transcript:', transcript);
+        
+        const acousticFindings = callAnalysis.acousticFindings
+          .map(f => f.name)
+          .slice(0, 5); // Top 5 findings
+
+        const requestBody = {
+          transcript,
+          urgencyLevel: caseData.status,
+          primaryConcern: caseData.primaryConcern,
+          acousticFindings,
+          detectedEmotion: callAnalysis.triageSuggestion?.detectedEmotion || ''
+        };
+
+        console.log('[AI-Dispatch] Requesting recommendations with:', requestBody);
+
+        const response = await fetch('http://localhost:3000/api/ai-dispatch/recommend', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          throw new Error(`AI API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('[AI-Dispatch] Received recommendations:', data);
+        
+        setAiRecommendations(data.recommendations as ReceiverType[]);
+        setAiDescription(data.description || '');
+        setLoadingRecommendations(false);
+      } catch (err) {
+        console.error('Error fetching AI recommendations:', err);
+        setLoadingRecommendations(false);
+        // Continue with no AI recommendations on error
+      }
+    };
+
+    getAiRecommendations();
+  }, [callAnalysis, caseData]);
 
   const priorityColors = {
     'PRIORITY I': 'bg-red-500',
@@ -226,7 +299,7 @@ export function IncidentReport() {
                     timeZone: 'Asia/Singapore'
                   })} SGT
                 </p>
-                <Button variant="link" size="sm" className="text-blue-600 mt-1">
+                <Button variant="link" size="sm" className="mt-1" style={{ color: '#137FEC' }}>
                   View Protocol
                 </Button>
               </div>
@@ -239,7 +312,7 @@ export function IncidentReport() {
           {/* Patient Information */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-blue-600">
+              <CardTitle className="flex items-center gap-2" style={{ color: '#137FEC' }}>
                 <User className="w-5 h-5" />
                 Patient Information
               </CardTitle>
@@ -277,7 +350,7 @@ export function IncidentReport() {
                     {medicalHistoryArray.length > 0 ? (
                       medicalHistoryArray.map((item, index) => (
                         <div key={index} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
-                          <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#137FEC' }}></div>
                           <p className="text-sm text-gray-700">{item}</p>
                         </div>
                       ))
@@ -293,7 +366,7 @@ export function IncidentReport() {
           {/* Exact Location */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-blue-600">
+              <CardTitle className="flex items-center gap-2" style={{ color: '#137FEC' }}>
                 <MapPin className="w-5 h-5" />
                 Exact Location
               </CardTitle>
@@ -324,11 +397,11 @@ export function IncidentReport() {
         <Card className="mb-6">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-blue-600">
+              <CardTitle className="flex items-center gap-2" style={{ color: '#137FEC' }}>
                 <FileText className="w-5 h-5" />
                 AI Incident Analysis
               </CardTitle>
-              <Badge className="bg-blue-500 text-white px-3 py-1">Live Analysis</Badge>
+              <Badge className="text-white px-3 py-1" style={{ backgroundColor: '#137FEC' }}>Live Analysis</Badge>
             </div>
           </CardHeader>
           <CardContent>
@@ -343,17 +416,23 @@ export function IncidentReport() {
               <div>
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">ETA / EMS Unit</p>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-blue-600">3.5</span>
-                  <span className="text-xl font-semibold text-blue-600">MIN</span>
+                  <span className="text-4xl font-bold" style={{ color: '#137FEC' }}>3.5</span>
+                  <span className="text-xl font-semibold" style={{ color: '#137FEC' }}>MIN</span>
                 </div>
                 <p className="text-sm text-gray-600 mt-1">Nearest Unit: 025-260</p>
               </div>
             </div>
 
-            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-              <p className="text-sm text-gray-800 leading-relaxed italic">
-                "AI Voice Analysis all 995 call indicates high respiratory distress and verbal cues consistent with myocardial infarction. 
-                Immediate ACLS intervention recommended upon arrival."
+            <div className="p-5 rounded-lg" style={{ backgroundColor: '#EBF4FF', borderLeft: '4px solid #137FEC' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="w-4 h-4" style={{ color: '#137FEC' }} />
+                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#137FEC' }}>AI-Generated Incident Assessment</p>
+                {loadingRecommendations && (
+                  <span className="text-xs animate-pulse" style={{ color: '#137FEC' }}>Processing...</span>
+                )}
+              </div>
+              <p className="text-sm text-gray-800 leading-relaxed">
+                {aiDescription || 'AI analysis processing... Preliminary assessment indicates emergency situation requiring immediate attention. Detailed analysis will be available shortly.'}
               </p>
             </div>
           </CardContent>
@@ -379,8 +458,19 @@ export function IncidentReport() {
               className={`flex-1 ${
                 selectedReceivers.length === 0
                   ? 'bg-gray-300 cursor-not-allowed text-gray-500'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  : 'text-white'
               } px-8 py-6 text-lg font-semibold rounded-lg shadow-lg flex items-center justify-center gap-3`}
+              style={selectedReceivers.length > 0 ? { backgroundColor: '#137FEC' } : {}}
+              onMouseEnter={(e) => {
+                if (selectedReceivers.length > 0) {
+                  e.currentTarget.style.backgroundColor = '#0F5CCB';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (selectedReceivers.length > 0) {
+                  e.currentTarget.style.backgroundColor = '#137FEC';
+                }
+              }}
               onClick={handleTransmit}
             >
               <Zap className="w-6 h-6" />
@@ -399,7 +489,15 @@ export function IncidentReport() {
               {isDropdownOpen && (
                 <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                   <div className="p-4">
-                    <p className="text-sm font-semibold text-gray-900 mb-3">Select Dispatch Recipients</p>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-sm font-semibold text-gray-900">Select Dispatch Recipients</p>
+                      {loadingRecommendations && (
+                        <span className="text-xs flex items-center gap-1" style={{ color: '#137FEC' }}>
+                          <Sparkles className="w-3 h-3 animate-pulse" />
+                          Loading AI...
+                        </span>
+                      )}
+                    </div>
                     <div className="space-y-2">
                       {receiverOptions.map((option) => (
                         <label
@@ -411,12 +509,13 @@ export function IncidentReport() {
                               type="checkbox"
                               checked={selectedReceivers.includes(option.id)}
                               onChange={() => toggleReceiver(option.id)}
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              className="w-4 h-4 rounded border-gray-300"
+                              style={{ accentColor: '#137FEC' }}
                             />
                             <span className="text-sm text-gray-900">{option.label}</span>
                           </div>
                           {option.aiRecommended && (
-                            <Badge className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 flex items-center gap-1">
+                            <Badge className="text-xs px-2 py-0.5 flex items-center gap-1" style={{ backgroundColor: '#EBF4FF', color: '#137FEC' }}>
                               <Sparkles className="w-3 h-3" />
                               AI
                             </Badge>
@@ -445,7 +544,7 @@ export function IncidentReport() {
               {selectedReceivers.map((receiverId) => {
                 const option = receiverOptions.find(o => o.id === receiverId);
                 return (
-                  <Badge key={receiverId} className="bg-blue-600 text-white px-3 py-1">
+                  <Badge key={receiverId} className="text-white px-3 py-1" style={{ backgroundColor: '#137FEC' }}>
                     {option?.label}
                   </Badge>
                 );

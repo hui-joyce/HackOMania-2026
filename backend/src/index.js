@@ -8,6 +8,7 @@ const healthRouter = require('./routes/health');
 const audioRouter = require('./routes/audio');
 const analyticsRouter = require('./routes/analytics');
 const auditRouter = require('./routes/audit');
+const aiDispatchRouter = require('./routes/ai-dispatch');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -19,6 +20,7 @@ app.use('/api/health', healthRouter);
 app.use('/api/audio', audioRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/audit', auditRouter);
+app.use('/api/ai-dispatch', aiDispatchRouter);
 
 app.listen(port, () => {
     console.log(`Server is running at http://localhost:${port}`);

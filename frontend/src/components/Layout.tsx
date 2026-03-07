@@ -16,8 +16,8 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Only show this header if not on dashboard, analytics, or audit */}
-      {pathname !== '/' && pathname !== '/analytics' && pathname !== '/audit' && (
+      {/* Only show this header if not on dashboard, analytics, audit, or incident report */}
+      {pathname !== '/' && pathname !== '/analytics' && pathname !== '/audit' && !pathname.startsWith('/incident-report') && (
         <header className="bg-white shadow-sm py-4">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
             <h1 className="text-xl font-bold border-b-2 border-transparent bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-purple-600 inline-block">
@@ -44,7 +44,7 @@ export function Layout({ children }: LayoutProps) {
       <main className="flex-grow">
         {children}
       </main>
-      {pathname !== '/' && pathname !== '/analytics' && pathname !== '/audit' && (
+      {pathname !== '/' && pathname !== '/analytics' && pathname !== '/audit' && !pathname.startsWith('/incident-report') && (
         <footer className="bg-white py-4 text-center text-gray-500 text-sm border-t border-gray-100">
           &copy; {new Date().getFullYear()} SentiCare. All rights reserved.
         </footer>
