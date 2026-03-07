@@ -3,7 +3,7 @@ import { PatientInfo } from './PatientInfo';
 import { ActiveCallAnalysis } from './ActiveCallAnalysis';
 import { CaseLogsTable } from './CaseLogsTable';
 import { DashboardHeader } from './DashboardHeader';
-import { Patient, CallAnalysis } from '../types';
+import { Patient, CallAnalysis, CaseLog } from '../types';
 
 interface DashboardProps {
   initialData?: {
@@ -28,6 +28,8 @@ export function Dashboard({ initialData }: DashboardProps) {
       familyContact: 'John Goh',
     }
   );
+
+  const [selectedCase, setSelectedCase] = useState<CaseLog | null>(null);
 
   const [callAnalysis] = useState<CallAnalysis>(
     initialData?.callAnalysis || {
@@ -136,36 +138,60 @@ export function Dashboard({ initialData }: DashboardProps) {
     // In production, navigate/open modal
   };
 
+  const handleSelectCase = (caseLog: CaseLog) => {
+    setSelectedCase(caseLog);
+    // In production, fetch the analysis data for this case from API
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <DashboardHeader currentUser={{ name: 'David Lee', role: 'Lead Dispatcher' }} />
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-40 w-full">
+        <DashboardHeader currentUser={{ name: 'David Lee', role: 'Lead Dispatcher' }} />
+      </div>
 
-      <div className="p-6 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Left Sidebar - Patient Info */}
-          <div className="lg:col-span-1">
-            <PatientInfo
-              patient={patient}
-              onContactFamily={handleContactFamily}
-              onViewHistory={handleViewHistory}
-            />
-          </div>
+      {/* Scrollable Main Content */}
+      <div className="flex-1 overflow-y-auto pb-[60vh]">
+        <div className="p-6 max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Left Sidebar - Patient Info */}
+            <div className="lg:col-span-1">
+              <PatientInfo
+                patient={patient}
+                onContactFamily={handleContactFamily}
+                onViewHistory={handleViewHistory}
+              />
+            </div>
 
-          {/* Main Content */}
-          <div className="lg:col-span-3 space-y-6">
-            {/* Call Analysis with Card Layout */}
-            <ActiveCallAnalysis
-              acousticFindings={callAnalysis.acousticFindings}
-              patientContext={callAnalysis.patientContext}
-              triageSuggestion={callAnalysis.triageSuggestion}
-              transcript={callAnalysis.transcript}
-            />
-
-            {/* Case Logs Table */}
-            <CaseLogsTable caseLogs={callAnalysis.caseLogs} />
+            {/* Main Content */}
+            <div className="lg:col-span-3 space-y-6">
+              {/* Call Analysis - Only shown when case is selected */}
+              {selectedCase && (
+                <ActiveCallAnalysis
+                  acousticFindings={callAnalysis.acousticFindings}
+                  patientContext={callAnalysis.patientContext}
+                  triageSuggestion={callAnalysis.triageSuggestion}
+                  transcript={callAnalysis.transcript}
+                />
+              )}
+              
+              {/* Empty state when no case selected */}
+              {!selectedCase && (
+                <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+                  <p className="text-gray-500 text-sm">Select a case from the logs below to view call analysis</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Fixed Drawer - Case Logs */}
+      <CaseLogsTable 
+        caseLogs={callAnalysis.caseLogs}
+        onSelectCase={handleSelectCase}
+        selectedCaseId={selectedCase?.caseId}
+      />
     </div>
   );
 }
