@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Environment variables — never commit these
+.env
+.env.local
+.env.*.local
+
+# Google Cloud service account key — contains secrets
+gcs-service-account.json
+*.json.key
+
+# Build / cache
+dist/
+.cache/
