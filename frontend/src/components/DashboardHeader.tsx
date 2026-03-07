@@ -89,6 +89,26 @@ export function DashboardHeader({ currentUser, hideSearch = false }: DashboardHe
             <Settings className="w-6 h-6 text-gray-600" />
           </Button>
 
+          {/* Reset Database Button (Developer/Internal Tooling) */}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="text-white bg-red-500 hover:bg-red-600 border-none px-3"
+            onClick={async () => {
+              if (window.confirm('Are you sure you want to clear all data and reseed? This cannot be undone.')) {
+                try {
+                  const { clearAndReseedData } = await import('../services/firebaseService');
+                  await clearAndReseedData();
+                  window.location.reload();
+                } catch (err) {
+                  alert('Failed to reseed: ' + err);
+                }
+              }
+            }}
+          >
+            Reset DB
+          </Button>
+
           {/* User Profile */}
           <div className="flex items-center gap-2 pl-4 border-l border-gray-200">
             <div className="text-right hidden sm:block">

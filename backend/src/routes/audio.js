@@ -3,6 +3,7 @@ const router = express.Router();
 const { uploadAudioToGCS, float32ToWav } = require('../lib/gcsStorage');
 const { admin, db } = require('../config/firebase');
 const Groq = require('groq-sdk');
+const translate = require('translate-google');
 
 // Initialize Groq
 const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
@@ -135,6 +136,15 @@ function mapEmotionLabel(label) {
     return map[label] || label;
 }
 
+/**
+ * Helper function to generate unique case IDs in #EM-2026-XXX format
+ */
+function generateCaseId() {
+    const year = 2026;
+    const randomNum = Math.floor(Math.random() * 900) + 100; // 3-digit random number
+    return `#EM-${year}-${randomNum}`;
+}
+
 loadModels();
 
 // ---------------------------------------------------------------------------
@@ -229,25 +239,21 @@ router.post('/transcription', async (req, res) => {
 
         // 5.5 Optional Translation: if language is non-English, translate to English for keyword flagging
         let translatedText = text;
+        console.log(`[Audio/Debug] Original text string: "${text}"`);
+        console.log(`[Audio/Debug] Whisper detected language: "${language}"`);
+
         if (text.trim().length > 0 && language !== 'en' && language !== 'english') {
             try {
-                const translationRes = await groq.chat.completions.create({
-                    messages: [
-                        { role: "system", content: "You are a professional translator. You must translate the given text into English. Respond with ONLY the English translation and absolutely nothing else. If it is already English, just return it." },
-                        { role: "user", content: `Translate this to English: "${text}"` }
-                    ],
-                    model: "llama-3.3-70b-versatile", // Use Llama 3 70B for better zero-shot translation than Mixtral
-                    temperature: 0,
-                });
-                let resultText = translationRes.choices[0]?.message?.content?.trim() || text;
-                // Remove any quotes Llama might have added
-                if (resultText.startsWith('"') && resultText.endsWith('"')) {
-                    resultText = resultText.substring(1, resultText.length - 1);
-                }
-                translatedText = resultText;
+                console.log(`[Audio/Debug] Attempting free translation from ${language} to en...`);
+                // Use free translate-google package
+                const translation = await translate(text, { to: 'en' });
+                console.log(`[Audio/Debug] Translate returned: "${translation}"`);
+                translatedText = translation;
             } catch (err) {
-                console.error('[Audio] Groq translation error:', err);
+                console.error('[Audio] Translation package error:', err);
             }
+        } else {
+            console.log(`[Audio/Debug] Skipped translation step because language is matched as EN or text is empty.`);
         }
 
         const flags = flagKeywords(translatedText);
@@ -270,7 +276,7 @@ router.post('/transcription', async (req, res) => {
                             content: `Text: "${translatedText}"`
                         }
                     ],
-                    model: "mixtral-8x7b-32768",
+                    model: "llama3-8b-8192",
                     temperature: 0,
                 });
                 let textTone = sentimentRes.choices[0]?.message?.content?.trim();
@@ -432,9 +438,11 @@ router.post('/transcription', async (req, res) => {
             ],
         };
 
-        const newCaseRef = db.collection('cases').doc();
-        await newCaseRef.set(caseLog);
-        const caseId = newCaseRef.id;
+        const caseId = generateCaseId();
+        const caseWithId = { ...caseLog, caseId };
+
+        const newCaseRef = db.collection('cases').doc(caseId);
+        await newCaseRef.set(caseWithId);
 
         const callRef = db.collection('calls').doc(caseId);
         await callRef.set(callAnalysis);

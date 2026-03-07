@@ -80,7 +80,7 @@ export function Dashboard() {
     try {
       // Fetch resident data for this case
       const residentData = await fetchResidentById(caseLog.residentId);
-      const callData = await fetchCallById('CALL001');
+      const callData = await fetchCallById(caseLog.caseId);
       setResident(residentData as Resident);
       setCallAnalysis(callData as CallAnalysis);
     } catch (err) {
