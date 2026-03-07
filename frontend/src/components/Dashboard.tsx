@@ -1,132 +1,52 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PatientInfo } from './PatientInfo';
 import { ActiveCallAnalysis } from './ActiveCallAnalysis';
 import { CaseLogsTable } from './CaseLogsTable';
 import { DashboardHeader } from './DashboardHeader';
 import { Patient, CallAnalysis, CaseLog } from '../types';
+import { fetchPatientById, fetchCallById, fetchCases, seedSampleData } from '../services/firebaseService';
 
-interface DashboardProps {
-  initialData?: {
-    patient?: Patient;
-    callAnalysis?: CallAnalysis;
-  };
-}
-
-export function Dashboard({ initialData }: DashboardProps) {
-  // Sample data, later will be fetched from API
-  const [patient] = useState<Patient>(
-    initialData?.patient || {
-      id: 'PT001',
-      name: 'Pauline Goh',
-      age: 64,
-      medicalHistory: 'History: Hypertension',
-      address: '3 Everton Prk',
-      phone: '(+65) 9123 4567',
-      priority: 'PRIORITY I',
-      latitude: 1.3521,
-      longitude: 103.8198,
-      familyContact: 'John Goh',
-    }
-  );
-
+export function Dashboard() {
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [callAnalysis, setCallAnalysis] = useState<CallAnalysis | null>(null);
+  const [caseLogs, setCaseLogs] = useState<CaseLog[]>([]);
   const [selectedCase, setSelectedCase] = useState<CaseLog | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [callAnalysis] = useState<CallAnalysis>(
-    initialData?.callAnalysis || {
-      id: 'CALL001',
-      patientId: 'PT001',
-      timestamp: new Date().toISOString(),
-      status: 'ACTIVE',
-      acousticFindings: [
-        {
-          id: 'af1',
-          name: 'Impact Detected',
-          confidence: 98,
-          description: 'High confidence detection',
-        },
-        {
-          id: 'af2',
-          name: 'Heavy Breathing',
-          confidence: 96,
-          description: 'Irregular Pattern',
-        },
-        {
-          id: 'af3',
-          name: 'Glass Breaking',
-          confidence: 87,
-          description: 'Background noise',
-        },
-      ],
-      patientContext: {
-        homeAutomation: 'Home automation reported sudden fall via floor sensor',
-        livingStatus: 'Patient lives alone; wife is in care facility.',
-        familyStatus: 'Wife is in care facility',
-        smartwatchData: {
-          heartRate: 115,
-          status: 'Elevated',
-        },
-      },
-      triageSuggestion: {
-        protocol: 'Code Red Protocol',
-        severity: 'URGENT',
-        reason: 'Suspected cardiac event following trauma from fall. Immediate dispatch required.',
-        units: ['ALS Unit', 'Cardiology Alert'],
-        details: ['Cardiovascular alert', 'Trauma protocol'],
-      },
-      transcript: [
-        {
-          time: '00:12',
-          originalText: '¡Ayuda! Por favor, me he caído y no puedo levantarme.',
-          originalLanguage: 'ES',
-          translatedText: 'Help! Please, I\'ve fallen and I can\'t get up.',
-          translatedLanguage: 'EN',
-          keywords: ['FALL', 'HELP'],
-        },
-        {
-          time: '00:45',
-          originalText: 'Me duele mucho el pecho. Es como una presión.',
-          originalLanguage: 'ES',
-          translatedText: 'My chest hurts a lot. It\'s like pressure.',
-          translatedLanguage: 'EN',
-          keywords: ['CHEST PAIN'],
-        },
-      ],
-      caseLogs: [
-        {
-          caseId: '#EM-2024-089',
-          time: '14:02',
-          status: 'URGENT',
-          location: '123 Maple St',
-          patient: 'John Doe',
-          primaryConcern: 'Suspected MI / Fall',
-        },
-        {
-          caseId: '#EM-2024-092',
-          time: '14:05',
-          status: 'UNCERTAIN',
-          location: '882 West Ave',
-          patient: 'Mary Smith',
-          primaryConcern: 'Panic / Shortness of Breath',
-        },
-        {
-          caseId: '#EM-2024-094',
-          time: '14:10',
-          status: 'NON-URGENT',
-          location: 'Public Park Sect. 4',
-          patient: 'Unknown',
-          primaryConcern: 'Public Nuisance',
-        },
-        {
-          caseId: '#EM-2024-095',
-          time: '14:12',
-          status: 'URGENT',
-          location: '45 Skyline Dr',
-          patient: 'David Miller',
-          primaryConcern: 'Severe Allergic Reaction',
-        },
-      ],
-    }
-  );
+  // Fetch data from Firebase on component mount
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        setLoading(true);
+        
+        // Try to fetch patient data, if it doesn't exist, seed sample data
+        let patientData = await fetchPatientById('PT001');
+        
+        if (!patientData) {
+          console.log('No data found, seeding sample data...');
+          await seedSampleData();
+          patientData = await fetchPatientById('PT001');
+        }
+        
+        // Fetch call analysis and cases
+        const callData = await fetchCallById('CALL001');
+        const casesData = await fetchCases();
+        
+        setPatient(patientData as Patient);
+        setCallAnalysis(callData as CallAnalysis);
+        setCaseLogs(casesData);
+        setError(null);
+      } catch (err) {
+        console.error('Error loading dashboard data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboardData();
+  }, []);
 
   const handleContactFamily = () => {
     console.log('Contacting family...');
@@ -142,6 +62,33 @@ export function Dashboard({ initialData }: DashboardProps) {
     setSelectedCase(caseLog);
     // In production, fetch the analysis data for this case from API
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !patient || !callAnalysis) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">Error: {error || 'Failed to load data'}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Reload Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -172,6 +119,8 @@ export function Dashboard({ initialData }: DashboardProps) {
                   patientContext={callAnalysis.patientContext}
                   triageSuggestion={callAnalysis.triageSuggestion}
                   transcript={callAnalysis.transcript}
+                  audioUrl={callAnalysis.audioUrl}
+                  audioDuration={callAnalysis.audioDuration}
                 />
               )}
               
@@ -188,7 +137,7 @@ export function Dashboard({ initialData }: DashboardProps) {
 
       {/* Fixed Drawer - Case Logs */}
       <CaseLogsTable 
-        caseLogs={callAnalysis.caseLogs}
+        caseLogs={caseLogs}
         onSelectCase={handleSelectCase}
         selectedCaseId={selectedCase?.caseId}
       />

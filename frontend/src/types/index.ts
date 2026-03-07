@@ -65,5 +65,7 @@ export interface CallAnalysis {
   patientContext: PatientContext;
   triageSuggestion: TriageSuggestion;
   transcript: TranscriptEntry[];
-  caseLogs: CaseLog[];
+  caseLogs?: CaseLog[];
+  audioUrl?: string;
+  audioDuration?: number;
 }
