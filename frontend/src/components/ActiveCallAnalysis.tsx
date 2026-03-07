@@ -3,11 +3,11 @@ import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
-import { AcousticFinding, PatientContext, TriageSuggestion, TranscriptEntry } from '../types';
+import { AcousticFinding, ResidentContext, TriageSuggestion, TranscriptEntry } from '../types';
 
 interface ActiveCallAnalysisProps {
   acousticFindings: AcousticFinding[];
-  patientContext: PatientContext;
+  residentContext: ResidentContext;
   triageSuggestion: TriageSuggestion;
   transcript: TranscriptEntry[];
   audioUrl?: string; // Dynamic audio file URL from API
@@ -16,7 +16,7 @@ interface ActiveCallAnalysisProps {
 
 export function ActiveCallAnalysis({
   acousticFindings,
-  patientContext,
+  residentContext,
   triageSuggestion,
   transcript,
   audioUrl,
@@ -187,7 +187,7 @@ export function ActiveCallAnalysis({
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <Volume2 className="w-5 h-5 text-blue-600" />
+              <Volume2 className="w-5 h-5" style={{ color: '#137FEC' }} />
               <CardTitle>Acoustic Findings</CardTitle>
             </div>
           </CardHeader>
@@ -196,7 +196,7 @@ export function ActiveCallAnalysis({
               <div key={finding.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-start gap-2 flex-1">
-                    <div className="text-blue-600 mt-0.5">
+            <div className="text-accent mt-0.5" style={{ color: '#137FEC' }}>
                       {getAcousticIcon(finding.name)}
                     </div>
                     <h4 className="font-semibold text-sm text-gray-800">{finding.name}</h4>
@@ -226,7 +226,7 @@ export function ActiveCallAnalysis({
               <div className="flex-1">
                 <p className="text-xs font-medium text-gray-700">Home Status</p>
                 <p className="text-xs text-gray-600">
-                  {patientContext.homeAutomation || 'Smart home activity detected'}
+                  {residentContext.homeAutomation || 'Smart home activity detected'}
                 </p>
               </div>
             </div>
@@ -236,18 +236,18 @@ export function ActiveCallAnalysis({
               <input type="checkbox" className="w-4 h-4 mt-0.5 text-green-600" defaultChecked disabled />
               <div className="flex-1">
                 <p className="text-xs font-medium text-gray-700">Living Situation</p>
-                <p className="text-xs text-gray-600">{patientContext.livingStatus}</p>
+                <p className="text-xs text-gray-600">{residentContext.livingStatus}</p>
               </div>
             </div>
 
             {/* Smartwatch Data */}
-            {patientContext.smartwatchData && (
+            {residentContext.smartwatchData && (
               <div className="flex items-start gap-2 p-2 bg-gray-50 rounded border border-gray-200">
                 <input type="checkbox" className="w-4 h-4 mt-0.5 text-green-600" defaultChecked disabled />
                 <div className="flex-1">
                   <p className="text-xs font-medium text-gray-700">Smartwatch Heart Rate</p>
                   <p className="text-xs text-gray-600">
-                    {patientContext.smartwatchData.heartRate} BPM ({patientContext.smartwatchData.status})
+                    {residentContext.smartwatchData.heartRate} BPM ({residentContext.smartwatchData.status})
                   </p>
                 </div>
               </div>
@@ -256,7 +256,7 @@ export function ActiveCallAnalysis({
         </Card>
 
         {/* Suggested Triage Card */}
-        <Card className="border-2 border-blue-200 bg-blue-50">
+          <Card className="border-2 p-0 overflow-hidden" style={{ borderColor: '#137FEC', backgroundColor: '#EBF4FF' }}>
           <CardHeader>
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-orange-600" />
@@ -309,7 +309,8 @@ export function ActiveCallAnalysis({
                   variant="default"
                   size="icon"
                   onClick={handlePlayPause}
-                  className="bg-blue-600 hover:bg-blue-700"
+                  className="rounded-full transition-colors"
+                  style={{ backgroundColor: '#137FEC' }}
                 >
                   {isPlaying ? (
                     <Pause className="w-5 h-5" />
@@ -335,9 +336,10 @@ export function ActiveCallAnalysis({
                     <div
                       key={i}
                       className={`flex-1 rounded-full transition-colors ${
-                        i / waveformData.length *100 <= playProgress ? 'bg-blue-500' : 'bg-gray-300'
+                        i / waveformData.length * 100 <= playProgress ? 'opacity-100' : 'opacity-50'
                       }`}
                       style={{
+                        backgroundColor: i / waveformData.length * 100 <= playProgress ? '#137FEC' : '#D1D5DB',
                         height: `${Math.max(20, val)}%`,
                       }}
                     />
@@ -346,20 +348,21 @@ export function ActiveCallAnalysis({
 
                 {/* Playhead */}
                 <div
-                  className="absolute top-0 bottom-0 w-1 bg-blue-600 transition-all"
+                  className="absolute top-0 bottom-0 w-1 transition-all"
                   style={{
+                    backgroundColor: '#137FEC',
                     left: `${playProgress}%`,
                     boxShadow: isDragging ? '0 0 8px rgba(37, 99, 235, 0.8)' : 'none',
                   }}
                 >
                   {/* Playhead Dot */}
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-blue-600 rounded-full shadow-lg border-2 border-white" />
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full shadow-lg border-2 border-white" style={{ backgroundColor: '#137FEC' }} />
                 </div>
               </div>
 
               {/* Audio Info */}
-              <div className="flex items-center gap-2 text-xs text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-200">
-                <Volume className="w-4 h-4 text-blue-600" />
+              <div className="flex items-center gap-2 text-xs text-gray-600 p-3 rounded-lg border" style={{ backgroundColor: '#EBF4FF', borderColor: '#137FEC' }}>
+                <Volume className="w-4 h-4" style={{ color: '#137FEC' }} />
                 <span>Drag the playhead to rehear specific parts of the audio. Click to jump to any point in the recording.</span>
               </div>
             </div>
@@ -385,8 +388,8 @@ export function ActiveCallAnalysis({
                   </div>
 
                   {/* Translated Text Panel */}
-                  <div className="bg-blue-50 rounded-r-lg p-4 border-l border-blue-200">
-                    <p className="text-xs font-bold text-blue-700 mb-3 uppercase tracking-wide">
+                  <div className="bg-white rounded-r-lg p-4" style={{ borderLeft: '1px solid #137FEC' }}>
+                    <p className="text-xs font-bold mb-3 uppercase tracking-wide" style={{ color: '#137FEC' }}>
                       Translation ({entry.translatedLanguage})
                     </p>
                     <p className="text-sm text-blue-900 leading-relaxed font-medium">
