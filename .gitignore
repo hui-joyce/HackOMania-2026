@@ -22,6 +22,9 @@ build/
 .env.local
 .env.*.local
 
+# Firebase credentials (NEVER commit)
+*firebase-adminsdk*.json
+
 # OS files
 Thumbs.db
 

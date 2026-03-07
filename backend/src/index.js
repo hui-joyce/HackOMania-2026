@@ -7,6 +7,7 @@ dotenv.config();
 const healthRouter = require('./routes/health');
 const audioRouter = require('./routes/audio');
 const analyticsRouter = require('./routes/analytics');
+const auditRouter = require('./routes/audit');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -17,6 +18,7 @@ app.use(express.json({ limit: '500mb' }));
 app.use('/api/health', healthRouter);
 app.use('/api/audio', audioRouter);
 app.use('/api/analytics', analyticsRouter);
+app.use('/api/audit', auditRouter);
 
 app.listen(port, () => {
     console.log(`Server is running at http://localhost:${port}`);
