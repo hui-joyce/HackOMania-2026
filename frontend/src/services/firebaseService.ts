@@ -1,5 +1,5 @@
 import { db } from '../config/firebase';
-import { collection, addDoc, getDocs, getDoc, doc, query, where, writeBatch, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDoc, doc, query, where, writeBatch, onSnapshot, orderBy, deleteDoc } from 'firebase/firestore';
 import { Resident, CallAnalysis, CaseLog } from '../types';
 
 const RESIDENTS_COLLECTION = 'residents';
@@ -108,7 +108,8 @@ export async function createCall(call: Omit<CallAnalysis, 'id'>): Promise<string
 // cases
 export async function fetchCases(): Promise<CaseLog[]> {
   try {
-    const querySnapshot = await getDocs(collection(db, CASES_COLLECTION));
+    const q = query(collection(db, CASES_COLLECTION), orderBy('timestamp', 'desc'));
+    const querySnapshot = await getDocs(q);
     const cases: CaseLog[] = [];
     querySnapshot.forEach((doc) => {
       const data = doc.data();
@@ -122,6 +123,27 @@ export async function fetchCases(): Promise<CaseLog[]> {
     console.error('Error fetching cases:', error);
     throw error;
   }
+}
+
+export function subscribeToCases(callback: (cases: CaseLog[]) => void): () => void {
+  const q = query(
+    collection(db, CASES_COLLECTION),
+    orderBy('timestamp', 'desc')
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const cases: CaseLog[] = [];
+      snapshot.forEach((doc) => {
+        cases.push({ caseId: doc.id, ...doc.data() } as CaseLog);
+      });
+      callback(cases);
+    },
+    (error) => {
+      console.error('Error listening to cases:', error);
+    }
+  );
 }
 
 export async function fetchCasesByResident(residentId: string): Promise<CaseLog[]> {

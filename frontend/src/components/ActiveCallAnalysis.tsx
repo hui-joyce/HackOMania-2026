@@ -174,7 +174,6 @@ export function ActiveCallAnalysis({
         <audio
           ref={audioRef}
           src={audioUrl}
-          crossOrigin="anonymous"
           preload="metadata"
         />
       )}
@@ -195,23 +194,55 @@ export function ActiveCallAnalysis({
               <CardTitle>Acoustic Findings</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {acousticFindings.map((finding) => (
-              <div key={finding.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-start gap-2 flex-1">
-            <div className="text-accent mt-0.5" style={{ color: '#137FEC' }}>
+          <CardContent className="space-y-6">
+            
+            {/* 1. Speech Emotion Section */}
+            <div>
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Speech Emotion</h3>
+              {acousticFindings.filter(f => f.name === 'Detected Emotion').map((finding) => (
+                <div key={finding.id} className="p-4 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
                       {getAcousticIcon(finding.name)}
                     </div>
-                    <h4 className="font-semibold text-sm text-gray-800">{finding.name}</h4>
+                    <div>
+                      <h4 className="font-bold text-blue-900 text-base">{finding.description}</h4>
+                      <p className="text-xs text-blue-700">Primary Tone Analyzed</p>
+                    </div>
                   </div>
-                  <Badge variant="secondary" className="text-xs ml-2">
+                  <Badge variant="secondary" className="bg-blue-200 text-blue-800 font-bold">
                     {finding.confidence}%
                   </Badge>
                 </div>
-                <p className="text-xs text-gray-600 ml-6">{finding.description}</p>
+              ))}
+              {acousticFindings.filter(f => f.name === 'Detected Emotion').length === 0 && (
+                <p className="text-sm text-gray-500 italic">No emotion detected.</p>
+              )}
+            </div>
+
+            {/* 2. Background Sounds Section */}
+            <div>
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Background Sounds</h3>
+              <div className="space-y-2">
+                {acousticFindings.filter(f => f.name !== 'Detected Emotion').map((finding) => (
+                  <div key={finding.id} className="p-2 bg-gray-50 rounded border border-gray-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="text-gray-500">
+                        {getAcousticIcon(finding.name)}
+                      </div>
+                      <h4 className="font-semibold text-sm text-gray-700">{finding.name}</h4>
+                    </div>
+                    <Badge variant="outline" className="text-xs text-gray-500">
+                      {finding.confidence}%
+                    </Badge>
+                  </div>
+                ))}
+                {acousticFindings.filter(f => f.name !== 'Detected Emotion').length === 0 && (
+                  <p className="text-sm text-gray-500 italic">No background sounds classified.</p>
+                )}
               </div>
-            ))}
+            </div>
+
           </CardContent>
         </Card>
 
@@ -260,28 +291,51 @@ export function ActiveCallAnalysis({
         </Card>
 
         {/* Suggested Triage Card */}
-          <Card className="border-2 p-0 overflow-hidden" style={{ borderColor: '#137FEC', backgroundColor: '#EBF4FF' }}>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-orange-600" />
-              <CardTitle>Suggested Triage</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <h4 className="font-semibold text-sm text-gray-800 mb-2">{triageSuggestion.protocol}</h4>
-              <Badge variant="warning" className="text-xs font-bold">
+        <Card className="border-2 p-0 flex flex-col" style={{ borderColor: '#137FEC' }}>
+          <div className="p-6 bg-blue-50 border-b border-blue-100 flex-1">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-orange-600" />
+                <CardTitle>Suggested Triage</CardTitle>
+              </div>
+              <Badge variant="warning" className="text-xs font-bold px-2 py-1">
                 {triageSuggestion.severity}
               </Badge>
             </div>
 
-            <p className="text-xs text-gray-700">{triageSuggestion.reason}</p>
+            <h4 className="font-bold text-lg text-gray-900 mb-2">{triageSuggestion.protocol}</h4>
+            <p className="text-sm text-gray-700 font-medium mb-4">{triageSuggestion.reason}</p>
 
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-gray-700">Recommended Units:</p>
+            {/* Structured Justifications */}
+            <div className="bg-white rounded-lg p-3 border border-gray-200 space-y-3">
+              <h5 className="text-xs font-bold text-gray-500 uppercase">Detection Factors</h5>
+              
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">Emotional Tone:</span>
+                <Badge variant="secondary" className="font-bold bg-blue-100 text-blue-800 border-none">{triageSuggestion.detectedEmotion}</Badge>
+              </div>
+
+              {triageSuggestion.justificationKeywords && triageSuggestion.justificationKeywords.length > 0 && (
+                <div className="pt-2 border-t border-gray-100">
+                  <span className="text-xs text-gray-500 block mb-1">Flagged Keywords:</span>
+                  <div className="flex flex-wrap gap-1">
+                    {triageSuggestion.justificationKeywords.map(kw => (
+                      <Badge key={kw} variant="destructive" className="text-[10px] px-1.5 py-0 hidden sm:inline-flex">
+                        {kw}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="p-4 bg-white space-y-4">
+            <div className="space-y-1.5">
+              <p className="text-xs font-bold text-gray-500 uppercase">Recommended Response</p>
               <div className="flex flex-wrap gap-2">
                 {triageSuggestion.units.map((unit) => (
-                  <Badge key={unit} variant="secondary" className="text-xs">
+                  <Badge key={unit} variant="secondary" className="text-xs font-medium bg-blue-50 text-blue-700 border-blue-100">
                     {unit}
                   </Badge>
                 ))}
@@ -298,8 +352,9 @@ export function ActiveCallAnalysis({
               <FileText className="w-4 h-4 mr-2" />
               Generate Report
             </Button>
-          </CardContent>
+          </div>
         </Card>
+
       </div>
 
       {/* Live Transcript Section */}
@@ -385,27 +440,30 @@ export function ActiveCallAnalysis({
                 {/* Timestamp */}
                 <p className="text-xs text-gray-500 mb-4 font-semibold">{entry.time}</p>
 
-                {/* Two Column Layout */}
-                <div className="grid grid-cols-2 gap-6 mb-6">
+                {/* Two Column Layout (or Single if English) */}
+                <div className={`grid gap-6 mb-6 ${entry.originalLanguage.toLowerCase() === 'en' || entry.originalLanguage.toLowerCase() === 'english' ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                  
                   {/* Original Text Panel */}
-                  <div className="border-r border-gray-300 pr-6 py-3 bg-gray-50 rounded-l-lg p-4">
+                  <div className={`pr-6 py-3 bg-gray-50 p-4 ${entry.originalLanguage.toLowerCase() === 'en' || entry.originalLanguage.toLowerCase() === 'english' ? 'rounded-lg border border-gray-200' : 'border-r border-gray-300 rounded-l-lg'}`}>
                     <p className="text-xs font-bold text-gray-700 mb-3 uppercase tracking-wide">
-                      Original ({entry.originalLanguage})
+                      Original ({entry.originalLanguage.toLowerCase() === 'en' ? 'English' : entry.originalLanguage})
                     </p>
                     <p className="text-sm text-gray-800 leading-relaxed font-medium">
                       "{entry.originalText}"
                     </p>
                   </div>
 
-                  {/* Translated Text Panel */}
-                  <div className="bg-white rounded-r-lg p-4" style={{ borderLeft: '1px solid #137FEC' }}>
-                    <p className="text-xs font-bold mb-3 uppercase tracking-wide" style={{ color: '#137FEC' }}>
-                      Translation ({entry.translatedLanguage})
-                    </p>
-                    <p className="text-sm text-blue-900 leading-relaxed font-medium">
-                      "{entry.translatedText}"
-                    </p>
-                  </div>
+                  {/* Translated Text Panel (Hidden if English) */}
+                  {entry.originalLanguage.toLowerCase() !== 'en' && entry.originalLanguage.toLowerCase() !== 'english' && (
+                    <div className="bg-white rounded-r-lg p-4" style={{ borderLeft: '1px solid #137FEC' }}>
+                      <p className="text-xs font-bold mb-3 uppercase tracking-wide" style={{ color: '#137FEC' }}>
+                        Translation ({entry.translatedLanguage})
+                      </p>
+                      <p className="text-sm text-blue-900 leading-relaxed font-medium">
+                        "{entry.translatedText}"
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Keywords Alert - Full Width */}

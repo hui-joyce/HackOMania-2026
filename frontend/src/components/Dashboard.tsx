@@ -5,7 +5,7 @@ import { ActiveCallAnalysis } from './ActiveCallAnalysis';
 import { CaseLogsTable } from './CaseLogsTable';
 import { DashboardHeader } from './DashboardHeader';
 import { Resident, CallAnalysis, CaseLog } from '../types';
-import { fetchResidentById, fetchCallById, fetchCases, seedSampleData } from '../services/firebaseService';
+import { fetchResidentById, fetchCallById, fetchCases, subscribeToCases, seedSampleData } from '../services/firebaseService';
 
 export function Dashboard() {
   const location = useLocation();
@@ -18,29 +18,39 @@ export function Dashboard() {
 
   // Fetch data from Firebase on component mount
   useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+
     const loadDashboardData = async () => {
       try {
         setLoading(true);
         
         // Check if demo data exists, if not seed sample data
-        if (!caseLogs.length) {
+        const initialCases = await fetchCases();
+        if (!initialCases.length) {
           console.log('No cases found, seeding sample data...');
           await seedSampleData();
         }
         
-        // Fetch cases only on initial load
-        const casesData = await fetchCases();
-        setCaseLogs(casesData);
-        setError(null);
+        // Subscribe to cases
+        unsubscribe = subscribeToCases((newCases) => {
+          setCaseLogs(newCases);
+          setLoading(false);
+          setError(null);
+        });
       } catch (err) {
         console.error('Error loading dashboard data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
-      } finally {
         setLoading(false);
       }
     };
 
     loadDashboardData();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   // Auto-select case if navigating back from incident report
@@ -70,7 +80,7 @@ export function Dashboard() {
     try {
       // Fetch resident data for this case
       const residentData = await fetchResidentById(caseLog.residentId);
-      const callData = await fetchCallById('CALL001');
+      const callData = await fetchCallById(caseLog.caseId);
       setResident(residentData as Resident);
       setCallAnalysis(callData as CallAnalysis);
     } catch (err) {

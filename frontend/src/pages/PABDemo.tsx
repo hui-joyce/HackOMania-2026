@@ -7,6 +7,8 @@ export function PABDemo() {
   const [countdown, setCountdown] = useState(10);
   const timerRef = useRef<number | null>(null);
   const speechSynthRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   // Speech synthesis helper
   const speak = (text: string): Promise<void> => {
@@ -29,8 +31,63 @@ export function PABDemo() {
     });
   };
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        try {
+          const arrayBuffer = await audioBlob.arrayBuffer();
+          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+          const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+          const float32Array = audioBuffer.getChannelData(0); // Get first channel
+
+          // POST to backend
+          const response = await fetch('http://localhost:3000/api/audio/transcription', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ audio: Array.from(float32Array) }),
+          });
+
+          if (!response.ok) {
+            console.error('Failed to upload audio:', await response.text());
+          } else {
+            const result = await response.json();
+            console.log('Audio analysis result:', result);
+          }
+        } catch (err) {
+          console.error('Error processing audio:', err);
+        }
+      };
+
+      mediaRecorder.start();
+    } catch (err) {
+      console.error('Error accessing microphone:', err);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    }
+  };
+
   // Finish recording and play completion message
   const finishRecording = async () => {
+    stopRecording();
     setState('processing');
     
     await speak("Your message has been recorded and sent to the emergency hotline. Help will be with you shortly.");
@@ -48,6 +105,7 @@ export function PABDemo() {
     // Start recording
     setState('recording');
     setCountdown(10);
+    await startRecording();
     
     // Start countdown timer
     timerRef.current = window.setInterval(() => {
@@ -64,6 +122,7 @@ export function PABDemo() {
 
   // Handle cancel
   const handleCancel = () => {
+    stopRecording();
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
