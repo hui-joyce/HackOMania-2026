@@ -16,9 +16,12 @@ export function PatientInfo({ patient, onContactFamily, onViewHistory }: Patient
       {/* Priority Card */}
       <Card>
         <CardHeader className="pb-4">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-2xl">{patient.name}, {patient.age}</CardTitle>
-            <Badge variant="urgent">{patient.priority}</Badge>
+          <div className="flex items-start gap-4 justify-between mb-3">
+            <div className="flex items-center gap-3 flex-1">
+              <img src="/pauline-goh.png" alt={patient.name} className="w-25 h-25 flex-shrink-0" />
+              <CardTitle className="text-xl">{patient.name}, {patient.age}</CardTitle>
+            </div>
+            <Badge variant="urgent" className="flex-shrink-0">{patient.priority}</Badge>
           </div>
           <p className="text-sm text-gray-600 mt-2">{patient.medicalHistory}</p>
         </CardHeader>

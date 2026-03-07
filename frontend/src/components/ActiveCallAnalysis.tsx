@@ -1,4 +1,5 @@
-import { Volume2, User, AlertTriangle, Play, Volume, Music, Zap, Radio, Waves } from 'lucide-react';
+import { Volume2, User, AlertTriangle, Play, Pause, Volume, Music, Zap, Radio, Waves } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
@@ -9,6 +10,8 @@ interface ActiveCallAnalysisProps {
   patientContext: PatientContext;
   triageSuggestion: TriageSuggestion;
   transcript: TranscriptEntry[];
+  audioUrl?: string; // Dynamic audio file URL from API
+  audioDuration?: number; // Audio duration in seconds (optional)
 }
 
 export function ActiveCallAnalysis({
@@ -16,7 +19,38 @@ export function ActiveCallAnalysis({
   patientContext,
   triageSuggestion,
   transcript,
+  audioUrl,
+  audioDuration,
 }: ActiveCallAnalysisProps) {
+  // Helper function to convert seconds to mm:ss format
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+  
+  // Helper function to convert percentage to seconds
+  const percentageToSeconds = (percentage: number, totalSeconds: number): number => {
+    return (percentage / 100) * totalSeconds;
+  };
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playProgress, setPlayProgress] = useState(audioUrl ? 0 : 33); // 0-100
+  const [isDragging, setIsDragging] = useState(false);
+  const waveformRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [currentTime, setCurrentTime] = useState('00:00');
+  const [duration, setDuration] = useState(audioDuration ? formatTime(audioDuration) : '02:14');
+
+  // Extract language pair from transcript (first entry determines the pair)
+  const languagePair = transcript.length > 0 
+    ? `${transcript[0].originalLanguage} → ${transcript[0].translatedLanguage}`
+    : 'Language Pair';
+
+  // Generate random waveform data for visualization
+  // TODO: Replace with real waveform data from audio processing (e.g., Web Audio API or backend)
+  const waveformData = Array.from({ length: 100 }, () => Math.random() * 100);
+
   const getAcousticIcon = (findingName: string) => {
     const name = findingName.toLowerCase();
     if (name.includes('impact') || name.includes('fall')) return <Radio className="w-4 h-4" />;
@@ -26,8 +60,121 @@ export function ActiveCallAnalysis({
     return <Volume2 className="w-4 h-4" />;
   };
 
+  const handlePlayPause = () => {
+    if (!audioRef.current) return;
+    
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().catch(err => console.error('Audio playback error:', err));
+      setIsPlaying(true);
+    }
+  };
+
+  const handleWaveformMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    handleWaveformClick(e);
+  };
+
+  const handleWaveformClick = (e: React.MouseEvent) => {
+    if (!waveformRef.current) return;
+    const rect = waveformRef.current.getBoundingClientRect();
+    const percentage = ((e.clientX - rect.left) / rect.width) * 100;
+    setPlayProgress(Math.max(0, Math.min(100, percentage)));
+    
+    // Calculate total seconds (use API duration if available, otherwise use 134 for demo)
+    const totalSeconds = audioDuration || 134; // 2:14 as default
+    const seekSeconds = percentageToSeconds(percentage, totalSeconds);
+    setCurrentTime(formatTime(seekSeconds));
+    
+    // Seek the audio if available
+    if (audioRef.current) {
+      audioRef.current.currentTime = seekSeconds;
+    }
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+      if (!waveformRef.current) return;
+      
+      const rect = waveformRef.current.getBoundingClientRect();
+      const percentage = ((e.clientX - rect.left) / rect.width) * 100;
+      setPlayProgress(Math.max(0, Math.min(100, percentage)));
+
+      // Calculate total seconds and update display
+      const totalSeconds = audioDuration || 134; // 2:14 as default
+      const seekSeconds = percentageToSeconds(percentage, totalSeconds);
+      setCurrentTime(formatTime(seekSeconds));
+      
+      // Seek the audio if available
+      if (audioRef.current) {
+        audioRef.current.currentTime = seekSeconds;
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, audioDuration]);
+  
+  // Sync audio playback with state
+  useEffect(() => {
+    if (!audioRef.current) return;
+    
+    const updatePlayback = () => {
+      const totalSeconds = audioRef.current?.duration || audioDuration || 134;
+      const percentage = (audioRef.current?.currentTime || 0) / totalSeconds * 100;
+      setPlayProgress(Math.max(0, Math.min(100, percentage)));
+      setCurrentTime(formatTime(audioRef.current?.currentTime || 0));
+    };
+    
+    const updateDuration = () => {
+      if (audioRef.current?.duration) {
+        setDuration(formatTime(audioRef.current.duration));
+      }
+    };
+    
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setPlayProgress(0);
+      setCurrentTime('00:00');
+    };
+    
+    const audio = audioRef.current;
+    audio.addEventListener('timeupdate', updatePlayback);
+    audio.addEventListener('loadedmetadata', updateDuration);
+    audio.addEventListener('ended', handleEnded);
+    
+    return () => {
+      audio.removeEventListener('timeupdate', updatePlayback);
+      audio.removeEventListener('loadedmetadata', updateDuration);
+      audio.removeEventListener('ended', handleEnded);
+    };
+  }, [audioDuration]);
+
   return (
     <div className="space-y-6">
+      {/* Hidden audio element for playback */}
+      {audioUrl && (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          crossOrigin="anonymous"
+          preload="metadata"
+        />
+      )}
+      
       {/* Header with Live Indicator */}
       <div className="flex items-center gap-2">
         <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
@@ -145,28 +292,78 @@ export function ActiveCallAnalysis({
         </Card>
       </div>
 
-      {/* Live Transcript Section - Reference Layout */}
+      {/* Live Transcript Section */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Volume className="w-5 h-5 text-blue-600" />
-              <div>
-                <CardTitle className="text-base">LIVE TRANSCRIPT & TRANSLATION (SPANISH → ENGLISH)</CardTitle>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon">
-                <Play className="w-5 h-5 text-blue-600" />
-              </Button>
-              <div className="flex items-center gap-2 w-32">
-                <div className="flex-1 h-1 bg-gray-200 rounded-full">
-                  <div className="h-full w-1/3 bg-blue-600 rounded-full"></div>
-                </div>
-                <span className="text-xs text-gray-600">02:14</span>
-              </div>
+          <div className="flex items-center gap-3">
+            <Volume className="w-5 h-5 text-blue-600" />
+            <div>
+              <CardTitle className="text-base">LIVE TRANSCRIPT & TRANSLATION ({languagePair})</CardTitle>
             </div>
           </div>
+            {/* Audio Player with Waveform*/}
+            <div className="pt-6 border-t border-gray-200 mt-8">
+              {/* Play Controls */}
+              <div className="flex items-center gap-4 mb-4">
+                <Button
+                  variant="default"
+                  size="icon"
+                  onClick={handlePlayPause}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {isPlaying ? (
+                    <Pause className="w-5 h-5" />
+                  ) : (
+                    <Play className="w-5 h-5" />
+                  )}
+                </Button>
+                <div className="text-sm font-semibold text-gray-700">
+                  {currentTime} / {duration}
+                </div>
+              </div>
+
+              {/* Waveform Visualization */}
+              <div
+                ref={waveformRef}
+                onClick={handleWaveformClick}
+                onMouseDown={handleWaveformMouseDown}
+                className="relative h-16 bg-gradient-to-b from-gray-50 to-gray-100 rounded-lg border border-gray-200 cursor-pointer overflow-hidden group mb-4"
+              >
+                {/* Waveform Bars */}
+                <div className="absolute inset-0 flex items-center justify-around gap-0.5 p-2 opacity-60">
+                  {waveformData.map((val, i) => (
+                    <div
+                      key={i}
+                      className={`flex-1 rounded-full transition-colors ${
+                        i / waveformData.length *100 <= playProgress ? 'bg-blue-500' : 'bg-gray-300'
+                      }`}
+                      style={{
+                        height: `${Math.max(20, val)}%`,
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {/* Playhead */}
+                <div
+                  className="absolute top-0 bottom-0 w-1 bg-blue-600 transition-all"
+                  style={{
+                    left: `${playProgress}%`,
+                    boxShadow: isDragging ? '0 0 8px rgba(37, 99, 235, 0.8)' : 'none',
+                  }}
+                >
+                  {/* Playhead Dot */}
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-blue-600 rounded-full shadow-lg border-2 border-white" />
+                </div>
+              </div>
+
+              {/* Audio Info */}
+              <div className="flex items-center gap-2 text-xs text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-200">
+                <Volume className="w-4 h-4 text-blue-600" />
+                <span>Drag the playhead to rehear specific parts of the audio. Click to jump to any point in the recording.</span>
+              </div>
+            </div>
+
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
