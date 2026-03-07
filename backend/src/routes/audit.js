@@ -56,7 +56,7 @@ router.get('/cases', async (req, res) => {
         status: data.status || 'NON-URGENT',
         residentName: data.residentName || 'Unknown',
         leadResponder: data.leadResponder || 'Unassigned',
-        auditScore: data.auditScore || Math.floor(Math.random() * 40) + 60, // Random score 60-100 if not set
+        auditScore: data.auditScore || 0,
         location: data.location || 'Unknown',
         responseTime: data.responseTime || 0,
       });
@@ -90,8 +90,9 @@ router.get('/stats', async (req, res) => {
 
     casesSnapshot.forEach((doc) => {
       const data = doc.data();
-      const score = data.auditScore || Math.floor(Math.random() * 40) + 60;
-      scores.push(score);
+      if (data.auditScore !== undefined && data.auditScore !== null) {
+        scores.push(data.auditScore);
+      }
 
       if (data.status === 'RESOLVED') {
         resolved++;

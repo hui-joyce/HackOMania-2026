@@ -1,9 +1,10 @@
-import { MapPin, Phone, Clock } from 'lucide-react';
+import { MapPin, Phone } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
 import { Map } from './Map';
 import { Resident } from '../types';
+import { getResidentImagePath } from '../utils/imageUtils';
 
 interface ResidentInfoProps {
   resident: Resident;
@@ -11,55 +12,93 @@ interface ResidentInfoProps {
   onViewHistory?: () => void;
 }
 
+function getStatusBadgeVariant(status?: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  switch (status) {
+    case 'URGENT':
+      return 'destructive';
+    case 'UNCERTAIN':
+      return 'secondary';
+    case 'NON-URGENT':
+      return 'outline';
+    default:
+      return 'default';
+  }
+}
+
+function getStatusDisplay(status?: string): string {
+  switch (status) {
+    case 'URGENT':
+      return 'Urgent';
+    case 'UNCERTAIN':
+      return 'Uncertain';
+    case 'NON-URGENT':
+      return 'Non-Urgent';
+    default:
+      return 'Unknown';
+  }
+}
+
 export function ResidentInfo({ resident, onContactFamily, onViewHistory }: ResidentInfoProps) {
+  const residentImagePath = getResidentImagePath(resident.name);
+  const displayStatus = resident.status || 'URGENT';
+
   return (
     <div className="w-full max-w-sm space-y-6">
-      {/* Priority Card */}
+      {/* Resident Card */}
       <Card>
-        <CardHeader className="pb-4">
-          <div className="flex items-start gap-4 justify-between mb-3">
-            <div className="flex items-center gap-3 flex-1">
-              <img src="/pauline-goh.png" alt={resident.name} className="w-25 h-25 flex-shrink-0" />
-              <CardTitle className="text-xl">{resident.name}, {resident.age}</CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex items-start gap-3 mb-2">
+            <img src={residentImagePath} alt={resident.name} className="w-16 h-16 rounded-lg flex-shrink-0 object-cover" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <div className="flex-1 min-w-0">
+                  <CardTitle className="text-lg line-clamp-2 leading-snug">{resident.name}</CardTitle>
+                  <p className="text-xs text-gray-500 mt-0.5">Age {resident.age}</p>
+                </div>
+                <Badge variant={getStatusBadgeVariant(displayStatus)} className="flex-shrink-0 text-xs">
+                  {getStatusDisplay(displayStatus)}
+                </Badge>
+              </div>
             </div>
-            <Badge variant="urgent" className="flex-shrink-0">{resident.priority}</Badge>
           </div>
-          <p className="text-sm text-gray-600 mt-2">{resident.medicalHistory}</p>
+          <p className="text-xs text-gray-600 line-clamp-2">{resident.medicalHistory}</p>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3">
           {/* Address */}
           <div className="flex items-start gap-3">
-            <MapPin className="w-5 h-5 text-gray-600 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-700">Address</p>
-              <p className="text-sm text-gray-600">{resident.address}</p>
+            <MapPin className="w-4 h-4 text-gray-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-gray-700">Address</p>
+              <p className="text-xs text-gray-600 line-clamp-2">{resident.address}</p>
             </div>
           </div>
 
           {/* Phone */}
           <div className="flex items-start gap-3">
-            <Phone className="w-5 h-5 text-gray-600 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-700">Contact</p>
-              <p className="text-sm text-gray-600">{resident.phone}</p>
+            <Phone className="w-4 h-4 text-gray-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-gray-700">Contact</p>
+              <p className="text-xs text-gray-600 break-all">{resident.phone}</p>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-2 pt-2">
             <Button
               onClick={onViewHistory}
               variant="outline"
-              className="flex-1"
+              className="flex-1 text-xs h-8"
+              size="sm"
             >
-              View History
+              History
             </Button>
             <Button
               onClick={onContactFamily}
               variant="default"
-              className="flex-1"
+              className="flex-1 text-xs h-8"
+              size="sm"
             >
-              Contact Family
+              Contact
             </Button>
           </div>
         </CardContent>
@@ -78,17 +117,6 @@ export function ResidentInfo({ resident, onContactFamily, onViewHistory }: Resid
             <p className="text-gray-600">Location data unavailable</p>
           </div>
         )}
-      </Card>
-
-      {/* Ambulance ETA Card */}
-      <Card style={{ backgroundColor: '#EBF4FF', borderColor: '#137FEC' }} className="border-2 p-0 overflow-hidden">
-        <CardContent className="flex items-center gap-3 pt-6">
-          <Clock className="w-5 h-5 flex-shrink-0" style={{ color: '#137FEC' }} />
-          <div>
-            <p className="text-xs text-gray-600 font-medium">Ambulance ETA</p>
-            <p className="text-sm font-semibold" style={{ color: '#137FEC' }}>4m 12s</p>
-          </div>
-        </CardContent>
       </Card>
     </div>
   );

@@ -6,6 +6,7 @@ export interface Resident {
   address: string;
   phone: string;
   priority: 'PRIORITY I' | 'PRIORITY II' | 'PRIORITY III';
+  status?: 'URGENT' | 'UNCERTAIN' | 'NON-URGENT';
   latitude?: number;
   longitude?: number;
   postalCode?: string;
