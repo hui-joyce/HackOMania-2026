@@ -1,0 +1,19 @@
+# Root .gitignore for HackOMania-2026
+
+# Subdirectory node_modules
+backend/node_modules/
+frontend/node_modules/
+
+# Root logs or temp files
+*.log
+.DS_Store
+
+# Local environment files
+backend/.env
+backend/gcs-service-account.json
+frontend/.env.local
+
+# Build artifacts
+backend/dist/
+frontend/dist/
+frontend/dist-ssr/
