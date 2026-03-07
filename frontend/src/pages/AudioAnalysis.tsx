@@ -175,9 +175,9 @@ export function AudioAnalysis() {
       {/* Input Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* File Upload */}
-        <label className="group flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-blue-300 bg-blue-50 hover:bg-blue-100 cursor-pointer p-8 transition-colors">
+        <label className="group flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed cursor-pointer p-8 transition-colors" style={{ borderColor: '#137FEC', backgroundColor: '#EBF4FF' }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#D6E9FF')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#EBF4FF')}>
           <span className="text-4xl">📁</span>
-          <span className="font-semibold text-blue-700">Upload Audio File</span>
+          <span className="font-semibold" style={{ color: '#137FEC' }}>Upload Audio File</span>
           <span className="text-xs text-gray-400">MP3, WAV, OGG, WebM…</span>
           <input
             type="file"
@@ -226,7 +226,17 @@ export function AudioAnalysis() {
           </div>
           <div className="px-6 py-4">
             {state.classLoading ? (
+<<<<<<< HEAD
+              <div className="flex items-center gap-3 text-gray-500 text-sm">
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none" style={{ color: '#137FEC' }}>
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Classifying audio…
+              </div>
+=======
               <Spinner color="text-blue-500" label="Classifying audio…" />
+>>>>>>> c3277341f17d94bd012c31cd5cf837af94e6ba5e
             ) : (
               <ul className="space-y-2">
                 {state.classification?.map((r) => (
@@ -234,8 +244,8 @@ export function AudioAnalysis() {
                     <span className="w-44 truncate text-sm font-medium text-gray-700">{r.label}</span>
                     <div className="flex-1 bg-gray-100 rounded-full h-2.5 overflow-hidden">
                       <div
-                        className="bg-gradient-to-r from-blue-500 to-purple-600 h-2.5 rounded-full transition-all duration-700"
-                        style={{ width: `${(r.score * 100).toFixed(1)}%` }}
+                        className="h-2.5 rounded-full transition-all duration-700"
+                        style={{ background: 'linear-gradient(to right, #137FEC, #9370DB)', width: `${(r.score * 100).toFixed(1)}%` }}
                       />
                     </div>
                     <span className="text-xs text-gray-500 w-12 text-right">{(r.score * 100).toFixed(1)}%</span>
