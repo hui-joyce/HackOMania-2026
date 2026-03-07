@@ -35,6 +35,8 @@ export interface TriageSuggestion {
   protocol: string;
   severity: string;
   reason: string;
+  detectedEmotion?: string;
+  justificationKeywords?: string[];
   units: string[];
   details: string[];
 }

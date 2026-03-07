@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { uploadAudioToGCS, float32ToWav } = require('../lib/gcsStorage');
+const { admin, db } = require('../config/firebase');
 const Groq = require('groq-sdk');
 
 // Initialize Groq
@@ -59,6 +60,7 @@ function flagKeywords(text) {
 
 let classifierPipeline = null;
 let emotionClassifierPipeline = null;
+let emotionClassifierPipeline = null;
 let modelsLoading = false;
 let modelsLoaded = false;
 
@@ -89,10 +91,50 @@ async function loadModels() {
         modelsLoaded = true; // Mark as done even if one failed, so we don't hang
         modelsLoading = false;
         console.log('[Audio] Model loading sequence complete.');
+
+        console.log('[Audio] Loading classification models (this may take time on first run)...');
+
+        // Load individually to catch specific errors
+        try {
+            classifierPipeline = await pipeline('audio-classification', 'Xenova/ast-finetuned-audioset-10-10-0.4593');
+            console.log('[Audio] Sound classification model loaded.');
+        } catch (e) {
+            console.error('[Audio] Failed to load sound classifier:', e.message);
+        }
+
+        try {
+            // Using the higher-accuracy ONNX-community model
+            emotionClassifierPipeline = await pipeline('audio-classification', 'onnx-community/Speech-Emotion-Classification-ONNX');
+            console.log('[Audio] Speech emotion model loaded.');
+        } catch (e) {
+            console.error('[Audio] Failed to load emotion classifier:', e.message);
+        }
+
+        modelsLoaded = true; // Mark as done even if one failed, so we don't hang
+        modelsLoading = false;
+        console.log('[Audio] Model loading sequence complete.');
     } catch (err) {
+        console.error('[Audio] Critical failure in model loading:', err);
         console.error('[Audio] Critical failure in model loading:', err);
         modelsLoading = false;
     }
+}
+
+/**
+ * Maps raw model labels to user-friendly categories.
+ */
+function mapEmotionLabel(label) {
+    const map = {
+        'ANG': 'Angry',
+        'CAL': 'Normal/Calm',
+        'DIS': 'Uncertain',
+        'FEA': 'Fearful',
+        'HAP': 'Happy',
+        'NEU': 'Normal/Calm',
+        'SAD': 'Sad',
+        'SUR': 'Uncertain'
+    };
+    return map[label] || label;
 }
 
 /**
@@ -118,16 +160,22 @@ loadModels();
 // Routes
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Routes
+// ---------------------------------------------------------------------------
+
 /**
  * GET /api/audio/status
  */
 router.get('/status', (req, res) => {
+    res.json({ ready: modelsLoaded && groq !== null });
     res.json({ ready: modelsLoaded && groq !== null });
 });
 
 /**
  * POST /api/audio/classification
  * Body: { audio: number[] }  (Float32 PCM at 16kHz)
+ * Returns top-10 audio classification labels + GCS storage URL.
  * Returns top-10 audio classification labels + GCS storage URL.
  */
 router.post('/classification', async (req, res) => {
@@ -147,6 +195,10 @@ router.post('/classification', async (req, res) => {
         console.log('[Audio] Classification result (top 10):', top10);
 
         res.json({ results: top10 });
+        const top10 = result.slice(0, 10);
+        console.log('[Audio] Classification result (top 10):', top10);
+
+        res.json({ results: top10 });
     } catch (err) {
         console.error('[Audio] Classification error:', err);
         res.status(500).json({ error: err.message });
@@ -162,9 +214,17 @@ router.post('/classification', async (req, res) => {
  *     flags: { urgency: {word,count}[], emotions: {word,count}[] },
  *     gcsUrl: string | null
  *   }
+ * Returns:
+ *   {
+ *     text: string,
+ *     flags: { urgency: {word,count}[], emotions: {word,count}[] },
+ *     gcsUrl: string | null
+ *   }
  */
 router.post('/transcription', async (req, res) => {
     try {
+        if (!groq) {
+            return res.status(503).json({ error: 'Groq API key not configured.' });
         if (!groq) {
             return res.status(503).json({ error: 'Groq API key not configured.' });
         }
@@ -182,49 +242,83 @@ router.post('/transcription', async (req, res) => {
         const transcriptionPromise = groq.audio.transcriptions.create({
             file: await Groq.toFile(wavBuffer, 'audio.wav', { type: 'audio/wav' }),
             model: 'whisper-large-v3', // User requested large-v3 for multilingual
-            response_format: 'json',
+            response_format: 'verbose_json', // needed to expose the detected language field
         });
 
         // 3. Perform Speech Emotion Recognition locally (Acoustic)
         const emotionPromise = emotionClassifierPipeline ? emotionClassifierPipeline(audioData) : Promise.resolve([]);
 
-        // 4. Upload to GCS in parallel
+        // 4. Perform acoustic sound classification
+        const classificationPromise = classifierPipeline ? classifierPipeline(audioData) : Promise.resolve([]);
+
+        // 5. Upload to GCS in parallel
         const uploadPromise = uploadAudioToGCS(audioData, 'recordings');
 
-        const [transcription, emotionResults, gcsUrl] = await Promise.all([
+        const [transcription, emotionResults, classificationResults, gcsUrl] = await Promise.all([
             transcriptionPromise,
             emotionPromise,
+            classificationPromise,
             uploadPromise
         ]);
 
         const text = transcription.text || '';
-        const flags = flagKeywords(text);
+        const language = transcription.language || 'en'; // Groq whisper returns language code
 
-        // 5. Hybrid Analysis: Send text to Groq for Sentiment/Tone context
+        // 5.5 Optional Translation: if language is non-English, translate to English for keyword flagging
+        let translatedText = text;
+        if (text.trim().length > 0 && language !== 'en' && language !== 'english') {
+            try {
+                const translationRes = await groq.chat.completions.create({
+                    messages: [
+                        { role: "system", content: "You are a professional translator. You must translate the given text into English. Respond with ONLY the English translation and absolutely nothing else. If it is already English, just return it." },
+                        { role: "user", content: `Translate this to English: "${text}"` }
+                    ],
+                    model: "llama-3.3-70b-versatile", // Use Llama 3 70B for better zero-shot translation than Mixtral
+                    temperature: 0,
+                });
+                let resultText = translationRes.choices[0]?.message?.content?.trim() || text;
+                // Remove any quotes Llama might have added
+                if (resultText.startsWith('"') && resultText.endsWith('"')) {
+                    resultText = resultText.substring(1, resultText.length - 1);
+                }
+                translatedText = resultText;
+            } catch (err) {
+                console.error('[Audio] Groq translation error:', err);
+            }
+        }
+
+        const flags = flagKeywords(translatedText);
+
+        // 6. Hybrid Analysis: Send text to Groq for Sentiment/Tone context
         let hybridEmotion = null;
         const rawAcoustic = emotionResults && emotionResults.length > 0 ? emotionResults[0] : null;
         const mappedAcoustic = rawAcoustic ? mapEmotionLabel(rawAcoustic.label) : 'Uncertain';
 
-        if (text.length > 5) {
+        if (translatedText.length > 5) {
             try {
                 const sentimentRes = await groq.chat.completions.create({
                     messages: [
                         {
                             role: "system",
-                            content: "You are an emotion analysis expert. Analyze the provided text and classify the speaker's tone into one of these EXACT categories: Normal/Calm, Angry, Sad, Fearful, Uncertain. Provide only the category name."
+                            content: "You are an emotion analysis expert. Analyze the provided text and classify the speaker's tone into one of these EXACT categories: Normal/Calm, Happy/Positive, Angry, Sad, Fearful, Uncertain. Provide only the category name."
                         },
                         {
                             role: "user",
-                            content: `Text: "${text}"`
+                            content: `Text: "${translatedText}"`
                         }
                     ],
-                    model: "llama3-8b-8192",
+                    model: "mixtral-8x7b-32768",
                     temperature: 0,
                 });
-                const textTone = sentimentRes.choices[0]?.message?.content?.trim();
+                let textTone = sentimentRes.choices[0]?.message?.content?.trim();
 
-                // Consensus Logic: If text sentiment strongly confirms or overrides acoustic
-                // For simplicity, we favor the text tone if the acoustic is 'Uncertain' or if they both point to high-intensity emotions
+                // Align prompt categories back to the strict UI-expected set
+                if (textTone === "Happy/Positive" || textTone === "Happy" || textTone?.includes("Positive")) {
+                    textTone = "Normal";
+                } else if (textTone === "Normal/Calm") {
+                    textTone = "Normal";
+                }
+
                 hybridEmotion = {
                     label: textTone || mappedAcoustic,
                     score: rawAcoustic ? rawAcoustic.score : 0.85,
@@ -246,15 +340,148 @@ router.post('/transcription', async (req, res) => {
         }
 
         console.log('[Audio] Groq Transcription:', text);
+        console.log('[Audio] Language:', language);
         console.log('[Audio] Final Consensus Emotion:', hybridEmotion?.label);
         console.log('[Audio] Keyword flags:', JSON.stringify(flags));
         if (gcsUrl) console.log('[Audio] Stored at:', gcsUrl);
+
+        // --- Save to Firestore ---
+        const timestamp = new Date();
+        const isoString = timestamp.toISOString();
+        const timeString = isoString.split('T')[1].substring(0, 5); // HH:MM
+
+        // --- Triage System ---
+        // URGENT: Explicitly urgent flagged keywords or absolute panic/fear
+        const isUrgent = flags.urgency.length > 0 || (hybridEmotion && hybridEmotion.label === 'Fearful');
+
+        // UNCERTAIN: Intense non-positive emotions without explicit emergency keywords, or explicit uncertainty
+        const isUncertain = !isUrgent && hybridEmotion && ['Angry', 'Sad', 'Uncertain'].includes(hybridEmotion.label);
+
+        let status = 'NON-URGENT';
+        let primaryConcern = 'Unspecified';
+        let protocol = 'Standard Response';
+        let units = ['Community Nursing'];
+
+        if (isUrgent) {
+            status = 'URGENT';
+            primaryConcern = flags.urgency.length > 0 ? `Urgency: ${flags.urgency[0].word}` : 'High distress detected';
+            protocol = 'Code Red Protocol';
+            units = ['ALS Unit', 'Paramedics'];
+        } else if (isUncertain) {
+            status = 'UNCERTAIN';
+            primaryConcern = 'Emotional Distress / Uncertain';
+            protocol = 'Priority Monitoring';
+            units = ['Social Worker', 'Tele-consult'];
+        } else {
+            status = 'NON-URGENT';
+            primaryConcern = 'Routine Check-in';
+            protocol = 'Standard Response';
+            units = ['Community Care'];
+        }
+
+        // Build justification string
+        const allKeywords = [...flags.urgency.map(f => f.word), ...flags.emotions.map(f => f.word)];
+        const topKeywords = allKeywords.slice(0, 3);
+        let justificationMsg = '';
+        if (topKeywords.length > 0) {
+            justificationMsg = ` These flagged keywords were detected: ${topKeywords.join(', ')}.`;
+        } else {
+            justificationMsg = ' No flagged keywords were detected.';
+        }
+
+        const residentId = 'PT001';
+        const residentName = 'Pauline Goh';
+
+        // 7. Create CaseLog
+        const caseLog = {
+            residentId,
+            time: timeString,
+            status,
+            location: '3 Everton Prk',
+            residentName,
+            primaryConcern,
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: isoString
+        };
+
+        // Prepare Acoustic Findings list (Emotion + Top 3 Sounds)
+        const activeFindings = [];
+        if (hybridEmotion) {
+            activeFindings.push({
+                id: 'emotion_1',
+                name: 'Detected Emotion',
+                confidence: Math.round(hybridEmotion.score * 100),
+                description: hybridEmotion.label
+            });
+        }
+
+        if (classificationResults && classificationResults.length > 0) {
+            const nonSpeech = classificationResults.filter(sound => {
+                const s = sound.label.toLowerCase();
+                return !s.includes('speech') && !s.includes('speaking') && !s.includes('conversation') && !s.includes('voice');
+            });
+            const top5Sounds = nonSpeech.slice(0, 5);
+            top5Sounds.forEach((sound, index) => {
+                activeFindings.push({
+                    id: `sound_${index}`,
+                    name: sound.label.charAt(0).toUpperCase() + sound.label.slice(1),
+                    confidence: Math.round(sound.score * 100),
+                    description: `Acoustic environment detection`
+                });
+            });
+        }
+
+        // 8. Create CallAnalysis
+        const callAnalysis = {
+            residentId,
+            timestamp: isoString,
+            status: 'COMPLETED',
+            audioUrl: gcsUrl,
+            audioDuration: 10,
+            acousticFindings: activeFindings,
+            residentContext: {
+                homeAutomation: 'Patient triggered Personal Alert Button',
+                livingStatus: 'Patient lives alone; family is away.',
+                familyStatus: 'Family is away',
+                smartwatchData: {
+                    heartRate: isUrgent ? 115 : (isUncertain ? 90 : 75),
+                    status: isUrgent ? 'Elevated' : (isUncertain ? 'Warning' : 'Normal'),
+                },
+            },
+            triageSuggestion: {
+                protocol: protocol,
+                severity: status,
+                reason: `Analysis detected: ${primaryConcern}.`,
+                detectedEmotion: hybridEmotion?.label || 'Normal',
+                justificationKeywords: topKeywords.length > 0 ? topKeywords : [],
+                units: units,
+                details: allKeywords,
+            },
+            transcript: [
+                {
+                    time: '00:00',
+                    originalText: text,
+                    originalLanguage: language, // Store Groq's detected language
+                    translatedText: translatedText,
+                    translatedLanguage: 'en',
+                    keywords: topKeywords,
+                }
+            ],
+        };
+
+        const newCaseRef = db.collection('cases').doc();
+        await newCaseRef.set(caseLog);
+        const caseId = newCaseRef.id;
+
+        const callRef = db.collection('calls').doc(caseId);
+        await callRef.set(callAnalysis);
 
         res.json({
             text,
             flags,
             gcsUrl,
-            speechEmotion: hybridEmotion
+            speechEmotion: hybridEmotion,
+            caseId
         });
     } catch (err) {
         console.error('[Audio] Transcription error:', err);
