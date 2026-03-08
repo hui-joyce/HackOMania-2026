@@ -223,8 +223,8 @@ export function CaseLogsTable({
           <div className="flex gap-3 flex-wrap mb-6 pb-4 border-b border-gray-200">
             {[
               { label: 'Urgent', status: 'URGENT' },
-              { label: 'Uncertain', status: 'UNCERTAIN' },
               { label: 'Non-Urgent', status: 'NON-URGENT' },
+              { label: 'Uncertain', status: 'UNCERTAIN' },
             ].map((filterOption) => {
               const count = countByStatus(filterOption.status);
               const isActive = activeFilters.includes(filterOption.status);
@@ -287,7 +287,17 @@ export function CaseLogsTable({
                     }}
                   >
                     <td className="py-3 px-3 font-mono text-sm" style={{ color: '#137FEC' }}>{log.caseId}</td>
-                    <td className="py-3 px-3 text-gray-600 text-sm">{log.time}</td>
+                    <td className="py-3 px-3 text-gray-600 text-sm">{(() => {
+                      const raw = (log as any).createdAt || log.time;
+                      const d = new Date(raw);
+                      if (isNaN(d.getTime())) return log.time;
+                      const dd = String(d.getDate()).padStart(2, '0');
+                      const mm = String(d.getMonth() + 1).padStart(2, '0');
+                      const yyyy = d.getFullYear();
+                      const hh = String(d.getHours()).padStart(2, '0');
+                      const min = String(d.getMinutes()).padStart(2, '0');
+                      return `${dd}-${mm}-${yyyy} ${hh}:${min}`;
+                    })()}</td>
                     <td className="py-3 px-3">
                       <Badge variant={getStatusVariant(log.status)}>
                         {log.status}

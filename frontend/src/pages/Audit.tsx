@@ -96,12 +96,13 @@ export function Audit() {
 
   const formatDate = (date: Date | string) => {
     const d = new Date(date);
-    return d.toLocaleDateString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    if (isNaN(d.getTime())) return 'N/A';
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${dd}-${mm}-${yyyy} ${hh}:${min}`;
   };
 
   if (loading && !error) {
@@ -236,7 +237,7 @@ export function Audit() {
                       <thead>
                         <tr className="border-b border-gray-200">
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">CASE ID</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">TIMESTAMP</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700">DATE</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">EMERGENCY TYPE</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">STATUS</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">LEAD RESPONDER</th>
