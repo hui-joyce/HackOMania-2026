@@ -9,7 +9,6 @@ interface MapProps {
   latitude?: number;
   longitude?: number;
   address: string;
-  residentName: string;
 }
 
 // Default center (Singapore) if no coordinates available
@@ -58,7 +57,7 @@ function MapUpdater({ center }: { center: [number, number] }) {
   );
 }
 
-export function Map({ latitude, longitude, address, residentName }: MapProps) {
+export function Map({ latitude, longitude, address }: MapProps) {
   const [center, setCenter] = useState<[number, number]>(
     latitude && longitude ? [latitude, longitude] : DEFAULT_CENTER
   );

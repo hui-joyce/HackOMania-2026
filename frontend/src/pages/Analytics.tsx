@@ -28,7 +28,7 @@ export function Analytics() {
   const [responseTimes, setResponseTimes] = useState<ResponseTime[]>([]);
   const [statusDistribution, setStatusDistribution] = useState<StatusDistribution | null>(null);
   
-  const [period, setPeriod] = useState('monthly');
+  const [period] = useState('monthly');
   const [urgencyPeriod, setUrgencyPeriod] = useState('weekly');
   const [responsePeriod, setResponsePeriod] = useState('weekly');
   const [loading, setLoading] = useState(true);
