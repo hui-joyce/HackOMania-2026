@@ -1,8 +1,10 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const dotenv = require('dotenv');
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-dotenv.config();
+const aiRouter = require('./routes/ai');
 
 const healthRouter = require('./routes/health');
 const audioRouter = require('./routes/audio');
@@ -20,6 +22,7 @@ app.use('/api/health', healthRouter);
 app.use('/api/audio', audioRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/audit', auditRouter);
+app.use('/api/ai', aiRouter);
 app.use('/api/ai-dispatch', aiDispatchRouter);
 
 app.listen(port, () => {

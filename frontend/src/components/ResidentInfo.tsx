@@ -8,18 +8,19 @@ import { getResidentImagePath } from '../utils/imageUtils';
 
 interface ResidentInfoProps {
   resident: Resident;
+  caseStatus?: string;
   onContactFamily?: () => void;
   onViewHistory?: () => void;
 }
 
-function getStatusBadgeVariant(status?: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+function getStatusBadgeVariant(status?: string): 'default' | 'secondary' | 'urgent' | 'warning' | 'outline' {
   switch (status) {
     case 'URGENT':
-      return 'destructive';
+      return 'urgent';
     case 'UNCERTAIN':
-      return 'secondary';
+      return 'warning';
     case 'NON-URGENT':
-      return 'outline';
+      return 'secondary';
     default:
       return 'default';
   }
@@ -28,19 +29,19 @@ function getStatusBadgeVariant(status?: string): 'default' | 'secondary' | 'dest
 function getStatusDisplay(status?: string): string {
   switch (status) {
     case 'URGENT':
-      return 'Urgent';
+      return 'URGENT';
     case 'UNCERTAIN':
-      return 'Uncertain';
+      return 'UNCERTAIN';
     case 'NON-URGENT':
-      return 'Non-Urgent';
+      return 'NON-URGENT';
     default:
       return 'Unknown';
   }
 }
 
-export function ResidentInfo({ resident, onContactFamily, onViewHistory }: ResidentInfoProps) {
+export function ResidentInfo({ resident, caseStatus, onContactFamily, onViewHistory }: ResidentInfoProps) {
   const residentImagePath = getResidentImagePath(resident.name);
-  const displayStatus = resident.status || 'URGENT';
+  const displayStatus = caseStatus || resident.status || 'URGENT';
 
   return (
     <div className="w-full max-w-sm space-y-6">
