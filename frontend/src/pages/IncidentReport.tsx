@@ -405,7 +405,6 @@ export function IncidentReport() {
                     latitude={resident.latitude}
                     longitude={resident.longitude}
                     address={resident.address}
-                    residentName={resident.name}
                   />
                 </div>
               </div>

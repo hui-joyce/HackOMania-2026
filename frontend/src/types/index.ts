@@ -54,12 +54,14 @@ export interface CaseLog {
   caseId: string;
   residentId: string;
   time: string;
-  status: 'URGENT' | 'UNCERTAIN' | 'NON-URGENT';
+  status: 'URGENT' | 'UNCERTAIN' | 'NON-URGENT' | 'RESOLVED';
   location: string;
   residentName: string;
   primaryConcern: string;
   action?: string;
   aiRecommendations?: string[];
+  createdAt?: string;
+  timestamp?: any;
 }
 
 export interface CallAnalysis {
