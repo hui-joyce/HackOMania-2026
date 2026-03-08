@@ -135,6 +135,7 @@ export function Dashboard() {
             <div className="lg:col-span-1">
               <ResidentInfo
                 resident={resident}
+                caseStatus={selectedCase?.status}
                 onContactFamily={handleContactFamily}
                 onViewHistory={handleViewHistory}
               />
