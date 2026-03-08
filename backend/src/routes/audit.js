@@ -51,7 +51,7 @@ router.get('/cases', async (req, res) => {
       cases.push({
         id: doc.id,
         caseId: data.caseId || doc.id,
-        timestamp: data.timestamp,
+        timestamp: parseTimestamp(data.timestamp || data.createdAt).toISOString(),
         primaryConcern: data.primaryConcern || 'Unknown',
         status: data.status || 'NON-URGENT',
         residentName: data.residentName || 'Unknown',
