@@ -1,22 +1,43 @@
 import { useState, useEffect, useRef } from 'react';
+import { db } from '../config/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { transcribeAnswer, submitAIAnswers } from '../services/aiService';
 
-type DeviceState = 'idle' | 'announcement' | 'recording' | 'processing' | 'completed' | 'cancelled';
+type DeviceState = 'idle' | 'announcement' | 'recording' | 'processing' | 'completed' | 'cancelled' | 'ai-intervention';
 
 export function PABDemo() {
   const [state, setState] = useState<DeviceState>('idle');
   const [countdown, setCountdown] = useState(10);
+  const [caseId, setCaseId] = useState<string | null>(null);
+  const [aiStatus, setAiStatus] = useState('');
   const timerRef = useRef<number | null>(null);
   const speechSynthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const aiStopRecordingRef = useRef<(() => void) | null>(null);
 
-  // Speech synthesis helper
-  const speak = (text: string): Promise<void> => {
+  // Map language codes to BCP-47 locale tags for TTS
+  const getLangTag = (lang: string): string => {
+    const map: Record<string, string> = {
+      'en': 'en-US', 'english': 'en-US',
+      'zh': 'zh-CN', 'chinese': 'zh-CN', 'mandarin': 'zh-CN',
+      'ms': 'ms-MY', 'malay': 'ms-MY',
+      'ta': 'ta-IN', 'tamil': 'ta-IN',
+      'ja': 'ja-JP', 'japanese': 'ja-JP',
+      'ko': 'ko-KR', 'korean': 'ko-KR',
+      'hi': 'hi-IN', 'hindi': 'hi-IN',
+    };
+    return map[lang.toLowerCase()] || lang;
+  };
+
+  // Speech synthesis helper with language support
+  const speak = (text: string, lang?: string): Promise<void> => {
     return new Promise((resolve) => {
       if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel(); // Cancel any ongoing speech
+        window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.9;
+        if (lang) utterance.lang = getLangTag(lang);
+        utterance.rate = 0.85;
         utterance.pitch = 1;
         utterance.volume = 1;
         speechSynthRef.current = utterance;
@@ -66,6 +87,9 @@ export function PABDemo() {
           } else {
             const result = await response.json();
             console.log('Audio analysis result:', result);
+            if (result.caseId) {
+              setCaseId(result.caseId);
+            }
           }
         } catch (err) {
           console.error('Error processing audio:', err);
@@ -153,6 +177,140 @@ export function PABDemo() {
     };
   }, []);
 
+  // Record audio for 10 seconds (or until user presses stop), return Float32Array
+  const recordAiAudio = (): Promise<Float32Array> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunksRef.current.push(e.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          aiStopRecordingRef.current = null;
+          clearTimeout(autoStopTimer);
+          const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          try {
+            const arrayBuffer = await blob.arrayBuffer();
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            resolve(audioBuffer.getChannelData(0));
+          } catch (err) {
+            reject(err);
+          }
+        };
+
+        mediaRecorder.start();
+
+        // Auto-stop after 10 seconds
+        const autoStopTimer = setTimeout(() => {
+          if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+        }, 10000);
+
+        aiStopRecordingRef.current = () => {
+          clearTimeout(autoStopTimer);
+          if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+        };
+      } catch (err) {
+        reject(err);
+      }
+    });
+  };
+
+  const handleStopAiRecording = () => {
+    if (aiStopRecordingRef.current) {
+      aiStopRecordingRef.current();
+    }
+  };
+
+  // Run the AI Q&A flow on the caller's device
+  const runCallerQA = async (questions: string[], language: string, forCaseId: string) => {
+    setState('ai-intervention');
+    const answers: string[] = new Array(questions.length).fill('');
+
+    for (let i = 0; i < questions.length; i++) {
+      // Speak question
+      setAiStatus(`Speaking question ${i + 1}...`);
+      await speak(questions[i], language);
+
+      // Record answer
+      setAiStatus(`Recording your answer for question ${i + 1}... Press the red button to stop.`);
+      let audioData: Float32Array;
+      try {
+        audioData = await recordAiAudio();
+      } catch {
+        answers[i] = '(Recording failed)';
+        continue;
+      }
+
+      // Transcribe
+      setAiStatus(`Processing your answer...`);
+      try {
+        const result = await transcribeAnswer(i, Array.from(audioData));
+        answers[i] = result.translatedText || result.originalText || '(No speech detected)';
+      } catch {
+        answers[i] = '(Transcription failed)';
+      }
+    }
+
+    // Submit answers
+    setAiStatus('Sending your answers...');
+    try {
+      const thankYouMessages: Record<string, string> = {
+        'en': 'Thank you. Your answers are being reviewed now. Help will be with you shortly.',
+        'english': 'Thank you. Your answers are being reviewed now. Help will be with you shortly.',
+        'zh': '谢谢您。我们正在审核您的回答。援助很快就会到来。',
+        'chinese': '谢谢您。我们正在审核您的回答。援助很快就会到来。',
+        'mandarin': '谢谢您。我们正在审核您的回答。援助很快就会到来。',
+        'ms': 'Terima kasih. Jawapan anda sedang disemak. Bantuan akan tiba tidak lama lagi.',
+        'malay': 'Terima kasih. Jawapan anda sedang disemak. Bantuan akan tiba tidak lama lagi.',
+        'ta': 'நன்றி. உங்கள் பதில்கள் மதிப்பாய்வு செய்யப்படுகின்றன. உதவி விரைவில் வரும்.',
+        'tamil': 'நன்றி. உங்கள் பதில்கள் மதிப்பாய்வு செய்யப்படுகின்றன. உதவி விரைவில் வரும்.',
+      };
+      const thankYou = thankYouMessages[language.toLowerCase()] || thankYouMessages['en'];
+      await speak(thankYou, language);
+      await submitAIAnswers(forCaseId, questions, answers);
+      setAiStatus('Your answers have been sent. Help is on the way.');
+    } catch {
+      setAiStatus('Failed to send answers. Help has still been notified.');
+    }
+  };
+
+  // Listen for AI intervention from dispatcher
+  useEffect(() => {
+    if (!caseId || state !== 'completed') return;
+
+    const q = query(
+      collection(db, 'aiInteractions'),
+      where('caseId', '==', caseId),
+      where('status', '==', 'AI_ACTIVE')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (snapshot.empty) return;
+
+      const doc = snapshot.docs[0];
+      const data = doc.data();
+      const questions = typeof data.questions === 'string'
+        ? data.questions.split('\n')
+            .map((l: string) => l.replace(/^\d+[\.\)]\s*[-]?\s*/, '').trim())
+            .filter((l: string) => l.length > 0 && l.endsWith('?'))
+        : data.questions || [];
+
+      if (questions.length > 0) {
+        unsubscribe(); // Stop listening once we start Q&A
+        runCallerQA(questions, data.language || 'en', caseId);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [caseId, state]);
+
   // Get display text based on state
   const getDisplayText = () => {
     switch (state) {
@@ -165,7 +323,9 @@ export function PABDemo() {
       case 'processing':
         return 'Processing your message...';
       case 'completed':
-        return 'Your message has been sent.';
+        return caseId ? `Your message has been sent. (Case: ${caseId})` : 'Your message has been sent.';
+      case 'ai-intervention':
+        return aiStatus || 'AI follow-up in progress...';
       case 'cancelled':
         return 'Alert cancelled.';
       default:
@@ -228,6 +388,39 @@ export function PABDemo() {
                         strokeWidth={3}
                         d="M5 13l4 4L19 7"
                       />
+                    </svg>
+                  </div>
+                </div>
+              )}
+
+              {/* AI Intervention - Recording indicator with stop button */}
+              {state === 'ai-intervention' && aiStatus.includes('Recording') && (
+                <div className="flex flex-col items-center justify-center mt-4 gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <div className="w-6 h-6 bg-red-500 rounded-full animate-pulse"></div>
+                      <div className="absolute inset-0 w-6 h-6 bg-red-500 rounded-full animate-ping opacity-75"></div>
+                    </div>
+                    <svg className="w-10 h-10 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+                      <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+                    </svg>
+                  </div>
+                  <button
+                    onClick={handleStopAiRecording}
+                    className="w-20 h-20 rounded-full bg-gradient-to-br from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 active:scale-95 text-white font-bold text-sm shadow-lg animate-pulse transition-all"
+                  >
+                    Stop
+                  </button>
+                </div>
+              )}
+
+              {/* AI Intervention - Speaking/Processing indicator */}
+              {state === 'ai-intervention' && !aiStatus.includes('Recording') && (
+                <div className="flex items-center justify-center mt-4">
+                  <div className="w-14 h-14 bg-blue-500 rounded-full flex items-center justify-center animate-pulse">
+                    <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
                     </svg>
                   </div>
                 </div>

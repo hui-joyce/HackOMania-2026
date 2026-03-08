@@ -5,6 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { AcousticFinding, ResidentContext, TriageSuggestion, TranscriptEntry } from '../types';
+import { startAIIntervention, getAIIntervention } from '../services/aiService';
+import { db } from '../config/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 interface ActiveCallAnalysisProps {
   acousticFindings: AcousticFinding[];
@@ -45,6 +48,16 @@ export function ActiveCallAnalysis({
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentTime, setCurrentTime] = useState('00:00');
   const [duration, setDuration] = useState(audioDuration ? formatTime(audioDuration) : '02:14');
+
+  // AI Intervention state
+  const [aiQuestions, setAiQuestions] = useState<string[]>([]);
+  const [aiAnswers, setAiAnswers] = useState<string[]>([]);
+  const [aiSummary, setAiSummary] = useState<{ summary: string; urgency: string; recommendedActions: string[] } | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [showAiPanel, setShowAiPanel] = useState(false);
+  const [aiCurrentQ, setAiCurrentQ] = useState(-1);
+  const [aiQStatus, setAiQStatus] = useState<('waiting' | 'speaking' | 'recording' | 'transcribing' | 'done')[]>([]);
+  const [aiWaitingForCaller, setAiWaitingForCaller] = useState(false);
 
   // Extract language pair from transcript (first entry determines the pair)
   const languagePair = transcript.length > 0 
@@ -95,6 +108,40 @@ export function ActiveCallAnalysis({
     // Seek the audio if available
     if (audioRef.current) {
       audioRef.current.currentTime = seekSeconds;
+    }
+  };
+
+    const handleAIIntervene = async () => {
+    if (!caseId) return;
+
+    try {
+      setAiLoading(true);
+      setShowAiPanel(true);
+      setAiSummary(null);
+      setAiCurrentQ(-1);
+      setAiWaitingForCaller(true);
+      // Detect caller's language from transcript
+      const callerLang = transcript.length > 0 ? transcript[0].originalLanguage : 'en';
+      const result = await startAIIntervention(caseId, callerLang);
+
+      // Parse questions from the response text
+      const questionLines = (result.questions as string)
+        .split('\n')
+        .map((l: string) => l.replace(/^\d+[\.\)]\s*[-]?\s*/, '').trim())
+        .filter((l: string) => l.length > 0 && l.endsWith('?'));
+      
+      setAiQuestions(questionLines);
+      setAiAnswers(new Array(questionLines.length).fill(''));
+      setAiQStatus(new Array(questionLines.length).fill('waiting'));
+      setAiLoading(false);
+
+      // Q&A will now happen on the caller's PABDemo device
+      // We subscribe to Firestore for live updates (handled by useEffect below)
+    } catch (error) {
+      alert("Failed to start AI intervention.");
+      setShowAiPanel(false);
+      setAiLoading(false);
+      setAiWaitingForCaller(false);
     }
   };
 
@@ -167,6 +214,93 @@ export function ActiveCallAnalysis({
     };
   }, [audioDuration]);
 
+  // Load existing intervention from Firebase on mount / case change
+  useEffect(() => {
+    // Reset AI state when switching cases
+    setShowAiPanel(false);
+    setAiQuestions([]);
+    setAiAnswers([]);
+    setAiSummary(null);
+    setAiQStatus([]);
+    setAiCurrentQ(-1);
+    setAiLoading(false);
+    setAiWaitingForCaller(false);
+
+    if (!caseId) return;
+    getAIIntervention(caseId).then((data) => {
+      if (!data || !data.found) return;
+
+      // Parse questions
+      const questionLines = typeof data.questions === 'string'
+        ? (data.questions as string)
+            .split('\n')
+            .map((l: string) => l.replace(/^\d+[\.\)]\s*[-]?\s*/, '').trim())
+            .filter((l: string) => l.length > 0 && l.endsWith('?'))
+        : (data.questions as string[]) || [];
+
+      setAiQuestions(questionLines);
+      setShowAiPanel(true);
+
+      if (data.status === 'COMPLETED' && data.summary) {
+        setAiAnswers(data.answers || new Array(questionLines.length).fill(''));
+        setAiQStatus(new Array(questionLines.length).fill('done'));
+        setAiSummary({
+          summary: data.summary,
+          urgency: data.urgency,
+          recommendedActions: data.recommendedActions || [],
+        });
+      } else {
+        setAiAnswers(data.answers || new Array(questionLines.length).fill(''));
+        setAiQStatus(new Array(questionLines.length).fill('waiting'));
+        setAiWaitingForCaller(true);
+      }
+    });
+  }, [caseId]);
+
+  // Subscribe to Firestore for live updates from the caller's Q&A
+  useEffect(() => {
+    if (!caseId || !showAiPanel) return;
+
+    const q = query(
+      collection(db, 'aiInteractions'),
+      where('caseId', '==', caseId)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (snapshot.empty) return;
+      const doc = snapshot.docs[0];
+      const data = doc.data();
+
+      // Parse questions if not already set
+      if (aiQuestions.length === 0 && data.questions) {
+        const questionLines = typeof data.questions === 'string'
+          ? (data.questions as string)
+              .split('\n')
+              .map((l: string) => l.replace(/^\d+[\.\)]\s*[-]?\s*/, '').trim())
+              .filter((l: string) => l.length > 0 && l.endsWith('?'))
+          : (data.questions as string[]) || [];
+        setAiQuestions(questionLines);
+      }
+
+      if (data.status === 'COMPLETED') {
+        setAiWaitingForCaller(false);
+        if (data.answers) {
+          setAiAnswers(data.answers);
+          setAiQStatus(new Array(data.answers.length).fill('done'));
+        }
+        if (data.summary) {
+          setAiSummary({
+            summary: data.summary,
+            urgency: data.urgency,
+            recommendedActions: data.recommendedActions || [],
+          });
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [caseId, showAiPanel]);
+
   return (
     <div className="space-y-6">
       {/* Hidden audio element for playback */}
@@ -178,11 +312,110 @@ export function ActiveCallAnalysis({
         />
       )}
       
-      {/* Header with Live Indicator */}
-      <div className="flex items-center gap-2">
-        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-        <h2 className="text-2xl font-bold text-gray-800">Active Call Analysis</h2>
+      {/* Header with Live Indicator + AI Intervene */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+          <h2 className="text-2xl font-bold text-gray-800">Active Call Analysis</h2>
+        </div>
+
+        <Button
+          variant="default"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+          style={{ backgroundColor: '#137FEC' }}
+          onClick={handleAIIntervene}
+          disabled={aiLoading}
+        >
+          <Volume2 className="w-4 h-4" />
+          {aiLoading ? 'GENERATING...' : 'AI VOICE INTERVENE'}
+        </Button>
       </div>
+
+      {/* AI Intervention Panel */}
+      {showAiPanel && (
+        <Card className="border-2" style={{ borderColor: '#137FEC' }}>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-blue-600" />
+              <CardTitle>AI Voice Intervention</CardTitle>
+              <Button variant="ghost" size="sm" className="ml-auto text-gray-400" onClick={() => setShowAiPanel(false)}>✕</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {aiLoading && (
+              <p className="text-sm text-gray-500 animate-pulse">Generating follow-up questions...</p>
+            )}
+
+            {!aiLoading && aiQuestions.length > 0 && !aiSummary && (
+              <>
+                <p className="text-xs text-gray-500 uppercase font-bold tracking-wider">AI is asking the caller follow-up questions:</p>
+                <div className="space-y-3">
+                  {aiQuestions.map((q, i) => (
+                    <div key={i} className={`p-3 rounded-lg border ${
+                      aiCurrentQ === i ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200' : 
+                      aiQStatus[i] === 'done' ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'
+                    }`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm font-semibold text-gray-800">{i + 1}. {q}</span>
+                        {aiQStatus[i] === 'waiting' && (
+                          <Badge variant="secondary" className="text-[10px] bg-gray-100 text-gray-500">Pending</Badge>
+                        )}
+                        {aiQStatus[i] === 'done' && (
+                          <Badge variant="secondary" className="text-[10px] bg-green-100 text-green-700">Answered</Badge>
+                        )}
+                      </div>
+                      {aiAnswers[i] && (
+                        <p className="text-sm text-gray-700 mt-1 pl-4 border-l-2 border-green-300 italic">"{aiAnswers[i]}"</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {aiWaitingForCaller && !aiQStatus.some(s => s === 'done') && (
+                  <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                    <p className="text-sm text-blue-700">Waiting for caller to answer on their device...</p>
+                  </div>
+                )}
+                {aiQStatus.length > 0 && aiQStatus.every(s => s === 'done') && !aiSummary && (
+                  <p className="text-sm text-gray-500 animate-pulse text-center">Generating summary...</p>
+                )}
+              </>
+            )}
+
+            {aiSummary && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant={aiSummary.urgency === 'URGENT' ? 'destructive' : aiSummary.urgency === 'NON-URGENT' ? 'secondary' : 'warning'} className="font-bold">
+                    {aiSummary.urgency}
+                  </Badge>
+                  <span className="text-xs text-gray-500">AI Assessment</span>
+                </div>
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                  <p className="text-xs font-bold text-gray-500 uppercase mb-1">Summary</p>
+                  <p className="text-sm text-gray-800">{aiSummary.summary}</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <p className="text-xs font-bold text-gray-500 uppercase mb-2">Extra Details</p>
+                  {aiQuestions.map((q, i) => (
+                    <div key={i} className="mb-2 last:mb-0">
+                      <p className="text-xs font-semibold text-gray-700">Q: {q}</p>
+                      <p className="text-xs text-gray-600">A: {aiAnswers[i] || 'No answer'}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="p-3 bg-green-50 rounded-lg border border-green-100">
+                  <p className="text-xs font-bold text-gray-500 uppercase mb-1">Recommended Actions</p>
+                  <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                    {aiSummary.recommendedActions.map((action, i) => (
+                      <li key={i}>{action}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Three Column Layout for Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -298,7 +531,7 @@ export function ActiveCallAnalysis({
                 <AlertTriangle className="w-5 h-5 text-orange-600" />
                 <CardTitle>Suggested Triage</CardTitle>
               </div>
-              <Badge variant="warning" className="text-xs font-bold px-2 py-1">
+              <Badge variant={triageSuggestion.severity === 'URGENT' ? 'urgent' : triageSuggestion.severity === 'NON-URGENT' ? 'secondary' : 'warning'} className="text-xs font-bold px-2 py-1">
                 {triageSuggestion.severity}
               </Badge>
             </div>
