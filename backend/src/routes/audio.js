@@ -145,7 +145,8 @@ function generateCaseId() {
     return `#EM-${year}-${randomNum}`;
 }
 
-loadModels();
+// Lazy load models on first request to avoid memory issues on Render free tier
+// loadModels();
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -165,6 +166,12 @@ router.get('/status', (req, res) => {
  */
 router.post('/classification', async (req, res) => {
     try {
+        // Lazy load models on first request
+        if (!modelsLoaded && !modelsLoading) {
+            console.log('[Audio] Lazy loading models on first request...');
+            loadModels();
+        }
+        
         if (!classifierPipeline) {
             return res.status(503).json({ error: 'Models are still loading, please wait.' });
         }
@@ -201,6 +208,13 @@ router.post('/transcription', async (req, res) => {
         if (!groq) {
             return res.status(503).json({ error: 'Groq API key not configured.' });
         }
+        
+        // Lazy load models on first request
+        if (!modelsLoaded && !modelsLoading) {
+            console.log('[Audio] Lazy loading models on first request...');
+            loadModels();
+        }
+        
         const { audio, language: languageHint } = req.body;
         if (!audio || !Array.isArray(audio)) {
             return res.status(400).json({ error: 'Invalid audio format. Expected an array of floats.' });
