@@ -6,7 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { DashboardHeader } from '../components/DashboardHeader';
 import { Map } from '../components/Map';
-import { fetchCaseById, fetchResidentById, fetchCallById } from '../services/firebaseService';
+import { fetchCaseById, fetchResidentById, fetchCallById, updateCaseStatus } from '../services/firebaseService';
 import { CaseLog, Resident, CallAnalysis } from '../types';
 
 type ReceiverType = 'police' | 'ambulance' | 'community-responders' | 'welfare-helpers';
@@ -48,13 +48,26 @@ export function IncidentReport() {
     setShowValidation(false);
   };
 
-  const handleTransmit = () => {
+  const handleTransmit = async () => {
     if (selectedReceivers.length === 0) {
       setShowValidation(true);
       return;
     }
-    console.log('Transmitting to dispatch units:', selectedReceivers);
-    // Handle transmission logic
+    
+    try {
+      console.log('Transmitting to dispatch units:', selectedReceivers);
+      
+      // Update case status to RESOLVED
+      if (caseId) {
+        await updateCaseStatus(decodeURIComponent(caseId), 'RESOLVED');
+        console.log('Case marked as RESOLVED');
+        
+        // Navigate back to dashboard
+        navigate('/', { state: { selectedCaseId: decodeURIComponent(caseId) } });
+      }
+    } catch (err) {
+      console.error('Error transmitting to dispatch units:', err);
+    }
   };
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -186,10 +199,17 @@ export function IncidentReport() {
     getAiRecommendations();
   }, [callAnalysis, caseData]);
 
-  const priorityColors = {
-    'PRIORITY I': 'bg-red-500',
-    'PRIORITY II': 'bg-orange-500',
-    'PRIORITY III': 'bg-yellow-500',
+  const getStatusVariant = (status: string) => {
+    switch (status) {
+      case 'URGENT':
+        return 'urgent';
+      case 'UNCERTAIN':
+        return 'warning';
+      case 'NON-URGENT':
+        return 'secondary';
+      default:
+        return 'default';
+    }
   };
 
   const getSeverityColor = (score: number) => {
@@ -263,8 +283,8 @@ export function IncidentReport() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-3 mb-2">
-                  <Badge className={`${priorityColors[resident.priority]} text-white px-3 py-1 text-sm font-bold`}>
-                    {resident.priority}
+                  <Badge variant={getStatusVariant(caseData.status)} className="px-3 py-1 text-sm font-bold">
+                    {caseData.status}
                   </Badge>
                   <span className="text-sm font-medium text-gray-600">
                     Case ID: #{caseId || '2948-AX'}
@@ -437,19 +457,6 @@ export function IncidentReport() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Dispatcher Note */}
-        <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg mb-6">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-yellow-900 mb-1">Dispatcher Note:</p>
-              <p className="text-sm text-yellow-800">
-                Patient's spouse is on-site performing bystander CPR. Access via service entrance requested.
-              </p>
-            </div>
-          </div>
-        </div>
 
         {/* Transmit Button */}
         <div className="space-y-4">

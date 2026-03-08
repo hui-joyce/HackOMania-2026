@@ -1,5 +1,5 @@
 import { db } from '../config/firebase';
-import { collection, addDoc, getDocs, getDoc, doc, query, where, writeBatch, onSnapshot, orderBy, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDoc, doc, query, where, writeBatch, onSnapshot, orderBy, deleteDoc, updateDoc } from 'firebase/firestore';
 import { Resident, CallAnalysis, CaseLog } from '../types';
 
 const RESIDENTS_COLLECTION = 'residents';
@@ -144,6 +144,16 @@ export function subscribeToCases(callback: (cases: CaseLog[]) => void): () => vo
       console.error('Error listening to cases:', error);
     }
   );
+}
+
+export async function updateCaseStatus(caseId: string, status: string): Promise<void> {
+  try {
+    const caseRef = doc(db, CASES_COLLECTION, caseId);
+    await updateDoc(caseRef, { status });
+  } catch (error) {
+    console.error('Error updating case status:', error);
+    throw error;
+  }
 }
 
 export async function fetchCasesByResident(residentId: string): Promise<CaseLog[]> {

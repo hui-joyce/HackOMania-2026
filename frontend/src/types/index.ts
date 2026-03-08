@@ -59,6 +59,7 @@ export interface CaseLog {
   residentName: string;
   primaryConcern: string;
   action?: string;
+  aiRecommendations?: string[];
 }
 
 export interface CallAnalysis {

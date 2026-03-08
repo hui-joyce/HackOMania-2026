@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { CaseLog } from '../types';
+import { updateCaseStatus } from '../services/firebaseService';
 
 interface CaseLogsTableProps {
   caseLogs: CaseLog[];
@@ -22,16 +23,17 @@ export function CaseLogsTable({
 }: CaseLogsTableProps) {
   const [activeFilters, setActiveFilters] = useState<string[]>(filter === 'all' ? [] : [filter]);
   const [activeTab, setActiveTab] = useState<'Active' | 'Archived'>('Active');
-  const [archivedCaseIds, setArchivedCaseIds] = useState<Set<string>>(new Set());
   const [drawerHeight, setDrawerHeight] = useState(MID_HEIGHT);
   const [isDragging, setIsDragging] = useState(false);
+  const [newCaseIds, setNewCaseIds] = useState<Set<string>>(new Set());
   const drawerRef = useRef<HTMLDivElement>(null);
+  const previousCaseIdsRef = useRef<Set<string>>(new Set());
 
   const filteredByArchive = caseLogs.filter((log) => {
     if (activeTab === 'Active') {
-      return !archivedCaseIds.has(log.caseId);
+      return log.status !== 'RESOLVED';
     } else {
-      return archivedCaseIds.has(log.caseId);
+      return log.status === 'RESOLVED';
     }
   });
 
@@ -39,6 +41,32 @@ export function CaseLogsTable({
     activeFilters.length === 0
       ? filteredByArchive
       : filteredByArchive.filter((log) => activeFilters.includes(log.status));
+
+  // Sort cases: URGENT first, then UNCERTAIN, then NON-URGENT, then RESOLVED
+  // Within each status level, sort by time (most recent at bottom)
+  const sortedLogs = [...filteredLogs].sort((a, b) => {
+    // Define priority order for statuses
+    const statusPriority: Record<string, number> = {
+      'URGENT': 0,
+      'UNCERTAIN': 1,
+      'NON-URGENT': 2,
+      'RESOLVED': 3
+    };
+    
+    const priorityA = statusPriority[a.status] ?? 4;
+    const priorityB = statusPriority[b.status] ?? 4;
+    
+    // First sort by status priority
+    if (priorityA !== priorityB) {
+      return priorityA - priorityB;
+    }
+    
+    // Then sort by time (least recent first, most recent last)
+    // Compare timestamps - newer timestamps should come after older ones
+    const timeA = a.createdAt || a.time || '';
+    const timeB = b.createdAt || b.time || '';
+    return timeA.localeCompare(timeB);
+  });
 
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -48,6 +76,8 @@ export function CaseLogsTable({
         return 'warning';
       case 'NON-URGENT':
         return 'secondary';
+      case 'RESOLVED':
+        return 'success';
       default:
         return 'default';
     }
@@ -57,14 +87,49 @@ export function CaseLogsTable({
     return filteredByArchive.filter((log) => log.status === status).length;
   };
 
-  const handleResolveCase = (caseId: string, e: React.MouseEvent) => {
+  const handleResolveCase = async (caseId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setArchivedCaseIds(prev => new Set(prev).add(caseId));
+    try {
+      await updateCaseStatus(caseId, 'RESOLVED');
+      console.log('Case marked as RESOLVED:', caseId);
+    } catch (error) {
+      console.error('Error resolving case:', error);
+    }
   };
 
   const handleRowClick = (caseLog: CaseLog) => {
     onSelectCase?.(caseLog);
   };
+
+  // Detect new cases and highlight them for 5 seconds
+  useEffect(() => {
+    const currentCaseIds = new Set(caseLogs.map(log => log.caseId));
+    const previousCaseIds = previousCaseIdsRef.current;
+
+    // Find newly added cases
+    const newlyAddedCases = caseLogs
+      .filter(log => !previousCaseIds.has(log.caseId))
+      .map(log => log.caseId);
+
+    if (newlyAddedCases.length > 0) {
+      // Add new case IDs to highlight set
+      setNewCaseIds(prev => new Set([...prev, ...newlyAddedCases]));
+
+      // Remove highlight after 5 seconds
+      newlyAddedCases.forEach(caseId => {
+        setTimeout(() => {
+          setNewCaseIds(prev => {
+            const updated = new Set(prev);
+            updated.delete(caseId);
+            return updated;
+          });
+        }, 5000);
+      });
+    }
+
+    // Update previous case IDs ref
+    previousCaseIdsRef.current = currentCaseIds;
+  }, [caseLogs]);
 
   // Snap to nearest position
   const snapToPosition = (height: number) => {
@@ -191,16 +256,29 @@ export function CaseLogsTable({
                 </tr>
               </thead>
               <tbody>
-                {filteredLogs.map((log) => (
+                {sortedLogs.map((log) => {
+                  const isNewCase = newCaseIds.has(log.caseId);
+                  const isSelected = selectedCaseId === log.caseId;
+                  
+                  return (
                   <tr
                     key={log.caseId}
                     onClick={() => handleRowClick(log)}
-                    className={`cursor-pointer border-b border-gray-100 transition-colors ${
-                      selectedCaseId === log.caseId
+                    className={`cursor-pointer border-b border-gray-100 transition-all duration-300 ${
+                      isSelected
                         ? 'hover:bg-gray-100'
                         : 'hover:bg-gray-50'
+                    } ${
+                      isNewCase ? 'animate-pulse' : ''
                     }`}
-                    style={{ backgroundColor: selectedCaseId === log.caseId ? 'rgba(19, 127, 236, 0.1)' : 'transparent' }}
+                    style={{ 
+                      backgroundColor: isNewCase 
+                        ? 'rgba(34, 197, 94, 0.15)' 
+                        : isSelected 
+                        ? 'rgba(19, 127, 236, 0.1)' 
+                        : 'transparent',
+                      borderLeft: isNewCase ? '4px solid #22c55e' : '4px solid transparent'
+                    }}
                   >
                     <td className="py-3 px-3 font-mono text-sm" style={{ color: '#137FEC' }}>{log.caseId}</td>
                     <td className="py-3 px-3 text-gray-600 text-sm">{log.time}</td>
@@ -230,7 +308,8 @@ export function CaseLogsTable({
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -1,9 +1,12 @@
 const express = require('express');
+const { HfInference } = require('@huggingface/inference');
 const router = express.Router();
 
-const HF_API_BASE = "https://router.huggingface.co/models";
-const HF_MODEL = "sshleifer/distilbart-cnn-12-6";
 const HF_API_KEY = process.env.HUGGINGFACE_API_KEY;
+const hf = new HfInference(HF_API_KEY);
+
+console.log('[AI-Dispatch] HuggingFace Inference SDK initialized');
+console.log('[AI-Dispatch] API Key configured:', !!HF_API_KEY);
 
 /**
  * POST /api/ai-dispatch/recommend
@@ -56,93 +59,115 @@ router.post('/recommend', async (req, res) => {
             : '';
 
         // Construct input for summarization model
-        const inputText = `Emergency call transcript: "${transcript}". ${urgencyContext}${concernContext}${emotionContext}${acousticContext}Determine which emergency resources are needed: ambulance for medical emergencies, police for security threats or crimes, community responders for non-critical situations, welfare helpers for elderly or mental health support.`;
+        const inputText = `You are analyzing an emergency call. Based on the following, recommend which resources to dispatch (ambulance, police, community responders, welfare helpers):
+
+Transcript: "${transcript}"
+Urgency: ${urgencyLevel || 'unknown'}
+Primary concern: ${primaryConcern || 'unspecified'}
+Emotion detected: ${detectedEmotion || 'neutral'}
+Acoustic findings: ${acousticFindings.join(', ') || 'none'}
+
+Respond with just the resource names that are needed, separated by commas. Be brief and direct.`;
 
         console.log('[AI-Dispatch] Requesting recommendations for:', inputText.substring(0, 200) + '...');
 
-        // Construct input for incident description - detailed and contextual
-        const descriptionInput = `Emergency Incident Report - Professional Assessment:
+        // Construct input for incident description - natural and concise
+        const descriptionInput = `You are an emergency dispatcher writing a brief incident assessment. Based on this call information, write a concise 2-3 sentence description for first responders:
 
-Call transcript: "${transcript}"
+Transcript: "${transcript}"
+Urgency level: ${urgencyLevel}
+Primary concern: ${primaryConcern || 'unspecified'}
+Caller emotion: ${detectedEmotion || 'neutral'}
+Acoustic indicators: ${acousticFindings.join(', ') || 'none detected'}
 
-Analysis:
-- Urgency: ${urgencyLevel}
-- Primary concern: ${primaryConcern || 'unspecified'}
-- Detected emotion: ${detectedEmotion || 'neutral'}
-- Acoustic indicators: ${acousticFindings.join(', ') || 'none detected'}
+Write in plain text (no formatting symbols or markdown). Include: (1) what happened, (2) key indicators observed, (3) caller's condition. Keep it professional but conversational, like a dispatcher briefing responders on the radio.`;
 
-Generate a comprehensive professional assessment (2-4 sentences) that includes:
-1. What emergency situation occurred based on the transcript
-2. Key verbal and acoustic indicators detected
-3. The caller's emotional state and any environmental factors
-4. Critical information responders need to know before arrival
+        // Try to call HuggingFace API using official SDK
+        let recommendations, description, usingFallback = false;
 
-Write in clear, professional emergency services language suitable for dispatcher reports.`;
-
-        // Call Hugging Face API for both resource recommendations and description
-        const [resourceResponse, descriptionResponse] = await Promise.all([
-            fetch(`${HF_API_BASE}/${HF_MODEL}`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${HF_API_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    inputs: inputText,
-                    parameters: {
-                        max_length: 150,
-                        min_length: 30,
-                        do_sample: false
-                    }
-                })
-            }),
-            fetch(`${HF_API_BASE}/${HF_MODEL}`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${HF_API_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    inputs: descriptionInput,
-                    parameters: {
-                        max_length: 200,
-                        min_length: 50,
-                        do_sample: false
-                    }
-                })
-            })
-        ]);
-
-        if (!resourceResponse.ok) {
-            const errorText = await resourceResponse.text();
-            console.error('[AI-Dispatch] HuggingFace API error:', resourceResponse.status, errorText);
+        try {
+            console.log('[AI-Dispatch] Calling HuggingFace router with chat completions...');
             
-            // Fallback to rule-based recommendations
-            return res.json({ 
-                recommendations: getFallbackRecommendations(urgencyLevel, primaryConcern, acousticFindings),
-                description: generateFallbackDescription(transcript, urgencyLevel, primaryConcern, acousticFindings, detectedEmotion),
-                fallback: true
-            });
+            // Use HuggingFace Router with OpenAI-compatible chat completions endpoint
+            const apiUrl = 'https://router.huggingface.co/v1/chat/completions';
+            const model = 'meta-llama/Meta-Llama-3-8B-Instruct';
+            
+            const [resourceResponse, descriptionResponse] = await Promise.all([
+                fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${HF_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [
+                            { role: 'system', content: 'You are a concise emergency dispatch AI assistant. Analyze calls and recommend resources briefly.' },
+                            { role: 'user', content: inputText }
+                        ],
+                        max_tokens: 100,
+                        temperature: 0.5,
+                        stream: false
+                    })
+                }),
+                fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${HF_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [
+                            { role: 'system', content: 'You are an emergency dispatcher writing brief, clear incident summaries for first responders. Use plain text only, no formatting symbols.' },
+                            { role: 'user', content: descriptionInput }
+                        ],
+                        max_tokens: 150,
+                        temperature: 0.6,
+                        stream: false
+                    })
+                })
+            ]);
+            
+            if (!resourceResponse.ok) {
+                const errorText = await resourceResponse.text();
+                throw new Error(`HF Router error: ${resourceResponse.status} - ${errorText}`);
+            }
+            
+            const resourceResult = await resourceResponse.json();
+            const descriptionResult = descriptionResponse.ok ? await descriptionResponse.json() : null;
+            
+            console.log('[AI-Dispatch] ✅ HuggingFace Router API call successful!');
+            console.log('[AI-Dispatch] Resource result:', JSON.stringify(resourceResult).substring(0, 200));
+
+            // Parse the generated text from chat completion format
+            const generatedText = resourceResult?.choices?.[0]?.message?.content || '';
+            recommendations = parseRecommendationsFromSummary(generatedText, urgencyLevel, primaryConcern, acousticFindings);
+
+            // Extract description from generated text
+            description = descriptionResult?.choices?.[0]?.message?.content || 
+                generateFallbackDescription(transcript, urgencyLevel, primaryConcern, acousticFindings, detectedEmotion);
+
+        } catch (apiError) {
+            console.log('[AI-Dispatch] HuggingFace API error:', apiError.message);
+            if (apiError.message?.includes('loading')) {
+                console.log('[AI-Dispatch] Model is loading, using fallback for now');
+            }
+            usingFallback = true;
+            
+            // Use intelligent rule-based AI analysis
+            recommendations = getFallbackRecommendations(urgencyLevel, primaryConcern, acousticFindings);
+            description = generateFallbackDescription(transcript, urgencyLevel, primaryConcern, acousticFindings, detectedEmotion);
         }
 
-        const resourceResult = await resourceResponse.json();
-        const descriptionResult = descriptionResponse.ok ? await descriptionResponse.json() : null;
-        
-        console.log('[AI-Dispatch] HuggingFace response:', resourceResult);
+        console.log('[AI-Dispatch] Recommendations:', recommendations);
+        console.log('[AI-Dispatch] Description:', description);
 
-        // Parse the summary to extract recommended resources
-        const summary = Array.isArray(resourceResult) ? resourceResult[0]?.summary_text : resourceResult.summary_text;
-        const recommendations = parseRecommendationsFromSummary(summary, urgencyLevel, primaryConcern, acousticFindings);
-
-        // Extract description
-        const description = descriptionResult 
-            ? (Array.isArray(descriptionResult) ? descriptionResult[0]?.summary_text : descriptionResult.summary_text)
-            : generateFallbackDescription(transcript, urgencyLevel, primaryConcern, acousticFindings, detectedEmotion);
-
-        console.log('[AI-Dispatch] Parsed recommendations:', recommendations);
-        console.log('[AI-Dispatch] Generated description:', description);
-
-        res.json({ recommendations, description });
+        res.json({ 
+            recommendations, 
+            description,
+            fallback: usingFallback
+        });
 
     } catch (error) {
         console.error('[AI-Dispatch] Error generating recommendations:', error);

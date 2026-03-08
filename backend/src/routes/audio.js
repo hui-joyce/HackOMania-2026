@@ -201,7 +201,7 @@ router.post('/transcription', async (req, res) => {
         if (!groq) {
             return res.status(503).json({ error: 'Groq API key not configured.' });
         }
-        const { audio } = req.body;
+        const { audio, language: languageHint } = req.body;
         if (!audio || !Array.isArray(audio)) {
             return res.status(400).json({ error: 'Invalid audio format. Expected an array of floats.' });
         }
@@ -212,11 +212,16 @@ router.post('/transcription', async (req, res) => {
         const wavBuffer = float32ToWav(audioData);
 
         // 2. Perform transcription via Groq (sending buffer as a file)
-        const transcriptionPromise = groq.audio.transcriptions.create({
+        const transcriptionOptions = {
             file: await Groq.toFile(wavBuffer, 'audio.wav', { type: 'audio/wav' }),
-            model: 'whisper-large-v3', // User requested large-v3 for multilingual
-            response_format: 'verbose_json', // needed to expose the detected language field
-        });
+            model: 'whisper-large-v3',
+            response_format: 'verbose_json',
+        };
+        // If a language hint is provided, pass it to Whisper to improve detection
+        if (languageHint) {
+            transcriptionOptions.language = languageHint;
+        }
+        const transcriptionPromise = groq.audio.transcriptions.create(transcriptionOptions);
 
         // 3. Perform Speech Emotion Recognition locally (Acoustic)
         const emotionPromise = emotionClassifierPipeline ? emotionClassifierPipeline(audioData) : Promise.resolve([]);
@@ -235,7 +240,24 @@ router.post('/transcription', async (req, res) => {
         ]);
 
         const text = transcription.text || '';
-        const language = transcription.language || 'en'; // Groq whisper returns language code
+        let language = transcription.language || 'en'; // Groq whisper returns language code
+
+        // Validate detected language: Whisper often misdetects short English clips as other languages.
+        // If the text is predominantly ASCII/Latin characters, it's likely English.
+        if (language !== 'en' && text.length > 0) {
+            const latinChars = text.replace(/[^a-zA-Z]/g, '').length;
+            const totalChars = text.replace(/\s/g, '').length;
+            if (totalChars > 0 && latinChars / totalChars > 0.8) {
+                console.log(`[Audio/Debug] Overriding detected language "${language}" → "en" (text is ${Math.round(latinChars/totalChars*100)}% Latin characters)`);
+                language = 'en';
+            }
+        }
+
+        // If a language hint was provided by the client, prefer it
+        if (languageHint) {
+            console.log(`[Audio/Debug] Using client-provided language hint: "${languageHint}" (Whisper detected: "${transcription.language}")`);
+            language = languageHint;
+        }
 
         // 5.5 Optional Translation: if language is non-English, translate to English for keyword flagging
         let translatedText = text;
@@ -329,23 +351,23 @@ router.post('/transcription', async (req, res) => {
         let status = 'NON-URGENT';
         let primaryConcern = 'Unspecified';
         let protocol = 'Standard Response';
-        let units = ['Community Nursing'];
+        let units = ['Community Nursing']; // Default units
 
         if (isUrgent) {
             status = 'URGENT';
             primaryConcern = flags.urgency.length > 0 ? `Urgency: ${flags.urgency[0].word}` : 'High distress detected';
             protocol = 'Code Red Protocol';
-            units = ['ALS Unit', 'Paramedics'];
+            units = ['ALS Unit', 'Paramedics']; // Default for urgent
         } else if (isUncertain) {
             status = 'UNCERTAIN';
             primaryConcern = 'Emotional Distress / Uncertain';
             protocol = 'Priority Monitoring';
-            units = ['Social Worker', 'Tele-consult'];
+            units = ['Social Worker', 'Tele-consult']; // Default for uncertain
         } else {
             status = 'NON-URGENT';
             primaryConcern = 'Routine Check-in';
             protocol = 'Standard Response';
-            units = ['Community Care'];
+            units = ['Community Care']; // Default for non-urgent
         }
 
         // Build justification string
@@ -358,17 +380,101 @@ router.post('/transcription', async (req, res) => {
             justificationMsg = ' No flagged keywords were detected.';
         }
 
-        const residentId = 'PT001';
-        const residentName = 'Pauline Goh';
+        // Resolve resident: use provided residentId, or pick a random one from Firestore
+        let residentId = req.body.residentId || null;
+        let residentName = 'Unknown Resident';
+        let residentAddress = 'Unknown';
+        let residentFamilyContact = 'Unknown';
+        let residentLivingStatus = 'Unknown';
+
+        if (residentId) {
+            const residentDoc = await db.collection('residents').doc(residentId).get();
+            if (residentDoc.exists) {
+                const rd = residentDoc.data();
+                residentName = rd.name || residentName;
+                residentAddress = rd.address || residentAddress;
+                residentFamilyContact = rd.familyContact || residentFamilyContact;
+                residentLivingStatus = rd.livingStatus || residentLivingStatus;
+            }
+        } else {
+            // Pick a random resident from Firestore
+            const residentsSnapshot = await db.collection('residents').get();
+            if (!residentsSnapshot.empty) {
+                const docs = residentsSnapshot.docs;
+                const randomDoc = docs[Math.floor(Math.random() * docs.length)];
+                residentId = randomDoc.id;
+                const rd = randomDoc.data();
+                residentName = rd.name || residentName;
+                residentAddress = rd.address || residentAddress;
+                residentFamilyContact = rd.familyContact || residentFamilyContact;
+                residentLivingStatus = rd.livingStatus || residentLivingStatus;
+            } else {
+                residentId = 'PT001';
+            }
+        }
+        console.log(`[Audio] Using resident: ${residentId} (${residentName})`);
+
+        // 6.5. Get AI Dispatch Recommendations
+        let aiRecommendations = [];
+        try {
+            // Build acoustic findings array from classification results
+            const acousticFindings = [];
+            if (classificationResults && classificationResults.length > 0) {
+                const nonSpeech = classificationResults.filter(sound => {
+                    const s = sound.label.toLowerCase();
+                    return !s.includes('speech') && !s.includes('speaking') && !s.includes('conversation') && !s.includes('voice');
+                });
+                const top5Sounds = nonSpeech.slice(0, 5);
+                acousticFindings.push(...top5Sounds.map(sound => sound.label));
+            }
+
+            console.log('[Audio] Calling AI Dispatch API for recommendations...');
+            const aiDispatchResponse = await fetch('http://localhost:3000/api/ai-dispatch/recommend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    transcript: text,
+                    urgencyLevel: status,
+                    primaryConcern: primaryConcern,
+                    acousticFindings: acousticFindings,
+                    detectedEmotion: hybridEmotion?.label || 'Normal'
+                })
+            });
+
+            if (aiDispatchResponse.ok) {
+                const aiData = await aiDispatchResponse.json();
+                aiRecommendations = aiData.recommendations || [];
+                console.log('[Audio] AI Recommendations received:', aiRecommendations);
+            } else {
+                console.warn('[Audio] AI Dispatch API returned non-OK status:', aiDispatchResponse.status);
+            }
+        } catch (aiError) {
+            console.error('[Audio] Error calling AI Dispatch API:', aiError.message);
+            // Continue without AI recommendations
+        }
+
+        // Map AI recommendations to unit names for the triageSuggestion
+        if (aiRecommendations.length > 0) {
+            const aiUnitMapping = {
+                'ambulance': 'Ambulance',
+                'police': 'Police',
+                'community-responders': 'Community Responders',
+                'welfare-helpers': 'Welfare Helpers'
+            };
+            
+            units = aiRecommendations.map(rec => aiUnitMapping[rec] || rec);
+            console.log('[Audio] Using AI-mapped units:', units);
+        }
 
         // 7. Create CaseLog
         const caseLog = {
             residentId,
             time: timeString,
             status,
-            location: '3 Everton Prk',
+            location: residentAddress,
             residentName,
             primaryConcern,
+            aiRecommendations,
             timestamp: admin.firestore.FieldValue.serverTimestamp(),
             createdAt: isoString
         };
@@ -410,8 +516,8 @@ router.post('/transcription', async (req, res) => {
             acousticFindings: activeFindings,
             residentContext: {
                 homeAutomation: 'Patient triggered Personal Alert Button',
-                livingStatus: 'Patient lives alone; family is away.',
-                familyStatus: 'Family is away',
+                livingStatus: residentLivingStatus,
+                familyStatus: `Family contact: ${residentFamilyContact}`,
                 smartwatchData: {
                     heartRate: isUrgent ? 115 : (isUncertain ? 90 : 75),
                     status: isUrgent ? 'Elevated' : (isUncertain ? 'Warning' : 'Normal'),
