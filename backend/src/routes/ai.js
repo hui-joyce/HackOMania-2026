@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { interveneCase, submitAnswers, transcribeAnswer, getIntervention } = require('../controllers/aicontroller');
+const { interveneCase, submitAnswers, transcribeAnswer, getIntervention } = require('../controllers/aiController');
 
 router.get('/intervene/:caseId', getIntervention);
 router.post('/intervene/:caseId', interveneCase);
