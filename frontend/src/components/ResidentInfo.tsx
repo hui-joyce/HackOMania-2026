@@ -111,7 +111,6 @@ export function ResidentInfo({ resident, caseStatus, onContactFamily, onViewHist
             latitude={resident.latitude}
             longitude={resident.longitude}
             address={resident.address}
-            residentName={resident.name}
           />
         ) : (
           <div className="h-48 flex items-center justify-center bg-gray-200">
