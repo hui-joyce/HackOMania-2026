@@ -160,7 +160,20 @@ exports.submitAnswers = async (req, res) => {
       }
     }
 
-    // 4. Create notification with summary
+    // 4. Update the call document's triageSuggestion.severity to reflect new urgency
+    const callRef = db.collection('calls').doc(caseId);
+    const callDoc = await callRef.get();
+    if (callDoc.exists) {
+      await callRef.update({
+        'triageSuggestion.severity': summary.urgency,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      console.log(`[AI Intervene] Updated call ${caseId} triageSuggestion.severity to ${summary.urgency}`);
+    } else {
+      console.warn(`[AI Intervene] ⚠️ No call document found for ${caseId} — triageSuggestion not updated`);
+    }
+
+    // 5. Create notification with summary
     await db.collection('notifications').add({
       caseId,
       type: "AI_INTERVENTION_COMPLETE",

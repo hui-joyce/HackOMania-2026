@@ -106,7 +106,13 @@ export function CaseLogsTable({
     const currentCaseIds = new Set(caseLogs.map(log => log.caseId));
     const previousCaseIds = previousCaseIdsRef.current;
 
-    // Find newly added cases
+    // On initial load, just set the reference without highlighting
+    if (previousCaseIds.size === 0) {
+      previousCaseIdsRef.current = currentCaseIds;
+      return;
+    }
+
+    // Find newly added cases (only cases that weren't in the previous list)
     const newlyAddedCases = caseLogs
       .filter(log => !previousCaseIds.has(log.caseId))
       .map(log => log.caseId);
