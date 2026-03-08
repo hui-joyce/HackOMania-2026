@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { db } from '../config/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { transcribeAnswer, submitAIAnswers } from '../services/aiService';
+import { fetchResidents } from '../services/firebaseService';
+import { Resident } from '../types';
 
 type DeviceState = 'idle' | 'announcement' | 'recording' | 'processing' | 'completed' | 'cancelled' | 'ai-intervention';
 
@@ -10,11 +12,15 @@ export function PABDemo() {
   const [countdown, setCountdown] = useState(10);
   const [caseId, setCaseId] = useState<string | null>(null);
   const [aiStatus, setAiStatus] = useState('');
+  const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
+  const [residents, setResidents] = useState<Resident[]>([]);
+  const [loadingResidents, setLoadingResidents] = useState(true);
   const timerRef = useRef<number | null>(null);
   const speechSynthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const aiStopRecordingRef = useRef<(() => void) | null>(null);
+  const recordingResidentIdRef = useRef<string | null>(null);
 
   // Map language codes to BCP-47 locale tags for TTS
   const getLangTag = (lang: string): string => {
@@ -28,9 +34,9 @@ export function PABDemo() {
       'hi': 'hi-IN', 'hindi': 'hi-IN',
     };
     return map[lang.toLowerCase()] || lang;
-  };
+  }; 
 
-  // Speech synthesis helper with language support
+  // Speech synthesis helper
   const speak = (text: string, lang?: string): Promise<void> => {
     return new Promise((resolve) => {
       if ('speechSynthesis' in window) {
@@ -73,13 +79,18 @@ export function PABDemo() {
           const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
           const float32Array = audioBuffer.getChannelData(0); // Get first channel
 
-          // POST to backend
+          // POST to backend using the captured resident ID from when recording started
+          const residentIdToSend = recordingResidentIdRef.current || 'PT001';
+          console.log(`[PAB] Uploading audio for resident: ${residentIdToSend}`);
           const response = await fetch('http://localhost:3000/api/audio/transcription', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ audio: Array.from(float32Array) }),
+            body: JSON.stringify({ 
+              audio: Array.from(float32Array),
+              residentId: residentIdToSend
+            }),
           });
 
           if (!response.ok) {
@@ -117,11 +128,20 @@ export function PABDemo() {
     await speak("Your message has been recorded and sent to the emergency hotline. Help will be with you shortly.");
     
     setState('completed');
+    
+    // Select new random resident for next demo after 2 seconds
+    setTimeout(() => {
+      selectRandomResident();
+    }, 2000);
   };
 
   // Handle emergency button press
   const handleEmergencyPress = async () => {
     if (state !== 'idle') return;
+
+    // Capture the current resident ID before recording starts
+    recordingResidentIdRef.current = selectedResident?.id || null;
+    console.log(`[PAB] Starting recording for resident: ${recordingResidentIdRef.current} (${selectedResident?.name})`);
 
     setState('announcement');
     await speak("Emergency alert received. Your 10 second recording will start now. Please describe your situation.");
@@ -162,8 +182,40 @@ export function PABDemo() {
     // Return to idle after 3 seconds
     setTimeout(() => {
       setState('idle');
+      selectRandomResident(); // Select new random resident for next demo
     }, 3000);
   };
+
+  // Select random resident from the list
+  const selectRandomResident = () => {
+    if (residents.length > 0) {
+      const randomIndex = Math.floor(Math.random() * residents.length);
+      setSelectedResident(residents[randomIndex]);
+    }
+  };
+
+  // Fetch residents on mount
+  useEffect(() => {
+    const loadResidents = async () => {
+      try {
+        setLoadingResidents(true);
+        const fetchedResidents = await fetchResidents();
+        setResidents(fetchedResidents);
+        
+        // Select random resident on initial load
+        if (fetchedResidents.length > 0) {
+          const randomIndex = Math.floor(Math.random() * fetchedResidents.length);
+          setSelectedResident(fetchedResidents[randomIndex]);
+        }
+      } catch (error) {
+        console.error('Error loading residents:', error);
+      } finally {
+        setLoadingResidents(false);
+      }
+    };
+
+    loadResidents();
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -344,6 +396,34 @@ export function PABDemo() {
               Personal Alert Button
             </h1>
             <p className="text-base text-gray-600">Emergency Response Device</p>
+            
+            {/* Assigned Resident Indicator */}
+            {loadingResidents ? (
+              <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg border border-gray-300">
+                <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span className="text-sm text-gray-500">Loading resident...</span>
+              </div>
+            ) : selectedResident ? (
+              <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2" style={{ backgroundColor: '#EBF4FF', borderColor: '#137FEC' }}>
+                <svg className="w-5 h-5" style={{ color: '#137FEC' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <div className="text-left">
+                  <div className="text-xs font-medium" style={{ color: '#137FEC' }}>Assigned Resident</div>
+                  <div className="text-sm font-bold text-gray-800">{selectedResident.name} ({selectedResident.id})</div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-red-50 rounded-lg border-2 border-red-300">
+                <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span className="text-sm font-medium text-red-700">No resident assigned</span>
+              </div>
+            )}
           </div>
 
           {/* Main Content Area */}
