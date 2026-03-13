@@ -1,5 +1,5 @@
 import { db } from '../config/firebase';
-import { collection, addDoc, getDocs, getDoc, doc, query, where, writeBatch, onSnapshot, orderBy, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDoc, doc, query, where, writeBatch, onSnapshot, orderBy, updateDoc } from 'firebase/firestore';
 import { Resident, CallAnalysis, CaseLog } from '../types';
 
 const RESIDENTS_COLLECTION = 'residents';
