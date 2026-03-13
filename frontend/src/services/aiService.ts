@@ -1,6 +1,8 @@
+const API_BASE = `${import.meta.env.VITE_API_URL}/ai`;
+
 export async function getAIIntervention(caseId: string) {
   try {
-    const res = await fetch(`/api/ai/intervene/${encodeURIComponent(caseId)}`);
+    const res = await fetch(`${API_BASE}/intervene/${encodeURIComponent(caseId)}`);
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -10,7 +12,7 @@ export async function getAIIntervention(caseId: string) {
 
 export async function startAIIntervention(caseId: string, language?: string) {
   try {
-    const res = await fetch(`/api/ai/intervene/${encodeURIComponent(caseId)}`, {
+    const res = await fetch(`${API_BASE}/intervene/${encodeURIComponent(caseId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ language: language || "en" }),
@@ -28,7 +30,7 @@ export async function startAIIntervention(caseId: string, language?: string) {
 }
 
 export async function transcribeAnswer(questionIndex: number, audioData: number[]) {
-  const res = await fetch(`/api/ai/transcribe-answer/${questionIndex}`, {
+  const res = await fetch(`${API_BASE}/transcribe-answer/${questionIndex}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ audio: audioData }),
@@ -43,7 +45,7 @@ export async function transcribeAnswer(questionIndex: number, audioData: number[
 
 export async function submitAIAnswers(caseId: string, questions: string[], answers: string[]) {
   try {
-    const res = await fetch(`/api/ai/intervene/${encodeURIComponent(caseId)}/answers`, {
+    const res = await fetch(`${API_BASE}/intervene/${encodeURIComponent(caseId)}/answers`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ questions, answers }),
