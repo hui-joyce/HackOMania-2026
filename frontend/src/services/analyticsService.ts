@@ -1,6 +1,6 @@
 // API base URL
-const API_BASE = 'http://localhost:3000/api/analytics';
-const HEALTH_CHECK_URL = 'http://localhost:3000/api/health';
+const API_BASE = `${import.meta.env.VITE_API_URL}/analytics`;
+const HEALTH_CHECK_URL = `${import.meta.env.VITE_API_URL}/health`;
 
 // Polling interval in ms 
 const POLLING_INTERVAL = 30000;
@@ -327,39 +327,3 @@ export function subscribeToStatusDistribution(
     mounted = false;
   };
 }
-
-/**
- * Data Model Expectations for Integration
- * 
- * When AI/Audio processing (Whisper, AST Model) integrates with the backend,
- * it should create/update documents in the Firestore 'cases' collection with:
- * 
- * Required fields:
- * - timestamp (Date) - When the case was created
- * - status ('URGENT' | 'UNCERTAIN' | 'NON-URGENT') - Triaged urgency level
- * - primaryConcern (string) - Main issue detected (e.g., "Fall Detection", "Respiratory Distress")
- * - residentId (string) - Reference to resident
- * - residentName (string) - Resident's name
- * 
- * Optional fields (for enhanced analytics):
- * - responseTime (number) - Time in seconds from alert to response
- * - acousticFindings (array) - Array of acoustic findings with confidence scores
- *   - Each finding should have: { id, name, confidence: 0-1, description }
- * - triageSuggestion - Triage details
- * 
- * Example case structure:
- * {
- *   timestamp: Firestore.Timestamp,
- *   status: 'URGENT',
- *   primaryConcern: 'Fall Detection',
- *   residentId: 'PT001',
- *   residentName: 'Pauline Goh',
- *   location: '3 Everton Prk',
- *   responseTime: 45, // seconds
- *   acousticFindings: [
- *     { id: '1', name: 'Fall Impact', confidence: 0.95, description: 'High confidence fall detected' }
- *   ],
- *   transcript: [...],
- *   audioUrl: 'https://...'
- * }
- */

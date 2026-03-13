@@ -40,9 +40,9 @@ export function IncidentReport() {
   ];
 
   const toggleReceiver = (receiverId: ReceiverType) => {
-    setSelectedReceivers(prev =>
+    setSelectedReceivers((prev: ReceiverType[]) =>
       prev.includes(receiverId)
-        ? prev.filter(id => id !== receiverId)
+        ? prev.filter((id: ReceiverType) => id !== receiverId)
         : [...prev, receiverId]
     );
     setShowValidation(false);
@@ -152,13 +152,13 @@ export function IncidentReport() {
         
         // Prepare data for AI API
         const transcript = callAnalysis.transcript
-          .map(t => t.translatedText || t.originalText)
+          .map((t: any) => t.translatedText || t.originalText)
           .join(' ');
         
         console.log('[AI-Dispatch] Extracted transcript:', transcript);
         
         const acousticFindings = callAnalysis.acousticFindings
-          .map(f => f.name)
+          .map((f: any) => f.name)
           .slice(0, 5); // Top 5 findings
 
         const requestBody = {
@@ -171,7 +171,7 @@ export function IncidentReport() {
 
         console.log('[AI-Dispatch] Requesting recommendations with:', requestBody);
 
-        const response = await fetch('http://localhost:3000/api/ai-dispatch/recommend', {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/ai-dispatch/recommend`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -257,7 +257,7 @@ export function IncidentReport() {
 
   // Parse medical history if it's a string
   const medicalHistoryArray = typeof resident.medicalHistory === 'string' 
-    ? resident.medicalHistory.split(',').map(item => item.trim()).filter(Boolean)
+    ? resident.medicalHistory.split(',').map((item: string) => item.trim()).filter(Boolean)
     : [];
 
   return (

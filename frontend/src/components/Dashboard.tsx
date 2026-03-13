@@ -5,7 +5,7 @@ import { ActiveCallAnalysis } from './ActiveCallAnalysis';
 import { CaseLogsTable } from './CaseLogsTable';
 import { DashboardHeader } from './DashboardHeader';
 import { Resident, CallAnalysis, CaseLog } from '../types';
-import { fetchResidentById, fetchCallById, fetchCases, subscribeToCases, seedSampleData } from '../services/firebaseService';
+import { fetchResidentById, fetchCallById, fetchCases, subscribeToCases } from '../services/firebaseService';
 
 export function Dashboard() {
   const location = useLocation();
@@ -24,13 +24,7 @@ export function Dashboard() {
       try {
         setLoading(true);
         
-        // Check if demo data exists, if not seed sample data
-        const initialCases = await fetchCases();
-        if (!initialCases.length) {
-          console.log('No cases found, seeding sample data...');
-          await seedSampleData();
-        }
-        
+
         // Subscribe to cases
         unsubscribe = subscribeToCases((newCases) => {
           setCaseLogs(newCases);

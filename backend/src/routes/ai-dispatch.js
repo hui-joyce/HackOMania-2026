@@ -5,9 +5,6 @@ const router = express.Router();
 const HF_API_KEY = process.env.HUGGINGFACE_API_KEY;
 const hf = new HfInference(HF_API_KEY);
 
-console.log('[AI-Dispatch] HuggingFace Inference SDK initialized');
-console.log('[AI-Dispatch] API Key configured:', !!HF_API_KEY);
-
 /**
  * POST /api/ai-dispatch/recommend
  * Generate AI-recommended dispatch resource allocation

@@ -1,5 +1,5 @@
 // API base URL
-const API_BASE = 'http://localhost:3000/api/audit';
+const API_BASE = `${import.meta.env.VITE_API_URL}/audit`;
 const FETCH_TIMEOUT = 10000;
 
 export interface AuditCase {

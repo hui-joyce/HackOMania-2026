@@ -225,26 +225,6 @@ export async function createCase(caseLog: Omit<CaseLog, 'caseId'>): Promise<stri
   }
 }
 
-// Clear all cases and reseed with updated data
-export async function clearAndReseedData(): Promise<void> {
-  try {
-    console.log('Clearing existing cases...');
-    
-    // Delete all existing cases
-    const casesSnapshot = await getDocs(collection(db, CASES_COLLECTION));
-    const deletePromises = casesSnapshot.docs.map(doc => deleteDoc(doc.ref));
-    await Promise.all(deletePromises);
-    
-    console.log('Reseeding sample data...');
-    await seedSampleData();
-    
-    console.log('Database cleared and reseeded successfully!');
-  } catch (error) {
-    console.error('Error clearing and reseeding data:', error);
-    throw error;
-  }
-}
-
 // sample 
 export async function seedSampleData(): Promise<void> {
   try {

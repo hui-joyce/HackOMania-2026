@@ -44,7 +44,7 @@ export function Analytics() {
     const loadingTimeout = setTimeout(() => {
       if (loading) {
         setLoading(false);
-        setError('API request timed out. Please ensure the backend server is running at http://localhost:3000');
+        setError('API request timed out. Please ensure the backend server is running.');
       }
     }, 15000); // 15 second timeout
 
@@ -151,7 +151,7 @@ export function Analytics() {
           <div className="text-center max-w-md">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: '#137FEC' }}></div>
             <p className="text-gray-600 font-medium mb-2">Loading analytics...</p>
-            <p className="text-gray-500 text-sm mb-4">Connecting to backend API at http://localhost:3000</p>
+            <p className="text-gray-500 text-sm mb-4">Connecting to backend API</p>
             <p className="text-gray-500 text-xs">This may take a few seconds on first load.</p>
           </div>
         </div>

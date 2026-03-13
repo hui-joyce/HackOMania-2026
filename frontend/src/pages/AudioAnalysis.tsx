@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 
-const API_BASE = 'http://localhost:3000/api/audio';
+const API_BASE = `${import.meta.env.VITE_API_URL}/audio`;
 
 interface ClassificationResult {
   label: string;
