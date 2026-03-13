@@ -60,63 +60,39 @@ function flagKeywords(text) {
 // ---------------------------------------------------------------------------
 
 let classifierPipeline = null;
-let emotionClassifierPipeline = null;
 let modelsLoading = false;
 let modelsLoaded = false;
+let modelsLoadPromise = null;
 
 async function loadModels() {
-    if (modelsLoading || modelsLoaded) return;
+    if (modelsLoaded) return;
+    if (modelsLoadPromise) return modelsLoadPromise;
+    
     modelsLoading = true;
-    try {
-        const { pipeline } = await import('@xenova/transformers');
-
-        console.log('[Audio] Loading classification models (this may take time on first run)...');
-
-        // Load individually to catch specific errors
+    modelsLoadPromise = (async () => {
         try {
-            classifierPipeline = await pipeline('audio-classification', 'Xenova/ast-finetuned-audioset-10-10-0.4593');
-            console.log('[Audio] Sound classification model loaded.');
-        } catch (e) {
-            console.error('[Audio] Failed to load sound classifier:', e.message);
+            const { pipeline } = await import('@xenova/transformers');
+
+            console.log('[Audio] Loading classification models (this may take time on first run)...');
+
+            try {
+                classifierPipeline = await pipeline('audio-classification', 'Xenova/ast-finetuned-audioset-10-10-0.4593');
+                console.log('[Audio] Sound classification model loaded.');
+            } catch (e) {
+                console.error('[Audio] Failed to load sound classifier:', e.message);
+            }
+
+            modelsLoaded = true;
+            modelsLoading = false;
+            console.log('[Audio] Model loading sequence complete.');
+        } catch (err) {
+            console.error('[Audio] Critical failure in model loading:', err);
+            modelsLoading = false;
+            modelsLoaded = true;
         }
-
-        try {
-            // Using the higher-accuracy ONNX-community model
-            emotionClassifierPipeline = await pipeline('audio-classification', 'onnx-community/Speech-Emotion-Classification-ONNX');
-            console.log('[Audio] Speech emotion model loaded.');
-        } catch (e) {
-            console.error('[Audio] Failed to load emotion classifier:', e.message);
-        }
-
-        modelsLoaded = true; // Mark as done even if one failed, so we don't hang
-        modelsLoading = false;
-        console.log('[Audio] Model loading sequence complete.');
-
-        console.log('[Audio] Loading classification models (this may take time on first run)...');
-
-        // Load individually to catch specific errors
-        try {
-            classifierPipeline = await pipeline('audio-classification', 'Xenova/ast-finetuned-audioset-10-10-0.4593');
-            console.log('[Audio] Sound classification model loaded.');
-        } catch (e) {
-            console.error('[Audio] Failed to load sound classifier:', e.message);
-        }
-
-        try {
-            // Using the higher-accuracy ONNX-community model
-            emotionClassifierPipeline = await pipeline('audio-classification', 'onnx-community/Speech-Emotion-Classification-ONNX');
-            console.log('[Audio] Speech emotion model loaded.');
-        } catch (e) {
-            console.error('[Audio] Failed to load emotion classifier:', e.message);
-        }
-
-        modelsLoaded = true; // Mark as done even if one failed, so we don't hang
-        modelsLoading = false;
-        console.log('[Audio] Model loading sequence complete.');
-    } catch (err) {
-        console.error('[Audio] Critical failure in model loading:', err);
-        modelsLoading = false;
-    }
+    })();
+    
+    return modelsLoadPromise;
 }
 
 /**
@@ -169,7 +145,7 @@ router.post('/classification', async (req, res) => {
         // Lazy load models on first request
         if (!modelsLoaded && !modelsLoading) {
             console.log('[Audio] Lazy loading models on first request...');
-            loadModels();
+            await loadModels();
         }
         
         if (!classifierPipeline) {
@@ -212,7 +188,7 @@ router.post('/transcription', async (req, res) => {
         // Lazy load models on first request
         if (!modelsLoaded && !modelsLoading) {
             console.log('[Audio] Lazy loading models on first request...');
-            loadModels();
+            await loadModels();
         }
         
         const { audio, language: languageHint } = req.body;
@@ -237,18 +213,14 @@ router.post('/transcription', async (req, res) => {
         }
         const transcriptionPromise = groq.audio.transcriptions.create(transcriptionOptions);
 
-        // 3. Perform Speech Emotion Recognition locally (Acoustic)
-        const emotionPromise = emotionClassifierPipeline ? emotionClassifierPipeline(audioData) : Promise.resolve([]);
-
-        // 4. Perform acoustic sound classification
+        // 3. Perform acoustic sound classification
         const classificationPromise = classifierPipeline ? classifierPipeline(audioData) : Promise.resolve([]);
 
-        // 5. Upload to GCS in parallel
+        // 4. Upload to GCS in parallel
         const uploadPromise = uploadAudioToGCS(audioData, 'recordings');
 
-        const [transcription, emotionResults, classificationResults, gcsUrl] = await Promise.all([
+        const [transcription, classificationResults, gcsUrl] = await Promise.all([
             transcriptionPromise,
-            emotionPromise,
             classificationPromise,
             uploadPromise
         ]);
@@ -294,10 +266,8 @@ router.post('/transcription', async (req, res) => {
 
         const flags = flagKeywords(translatedText);
 
-        // 6. Hybrid Analysis: Send text to Groq for Sentiment/Tone context
+        // 5. Hybrid Analysis: Send text to Groq for Sentiment/Tone context (no local emotion model anymore)
         let hybridEmotion = null;
-        const rawAcoustic = emotionResults && emotionResults.length > 0 ? emotionResults[0] : null;
-        const mappedAcoustic = rawAcoustic ? mapEmotionLabel(rawAcoustic.label) : 'Uncertain';
 
         if (translatedText.length > 5) {
             try {
@@ -325,23 +295,24 @@ router.post('/transcription', async (req, res) => {
                 }
 
                 hybridEmotion = {
-                    label: textTone || mappedAcoustic,
-                    score: rawAcoustic ? rawAcoustic.score : 0.85,
-                    acoustic: mappedAcoustic,
+                    label: textTone || 'Uncertain',
+                    score: 0.85,
                     textSentiment: textTone
                 };
             } catch (sentErr) {
                 console.error('[Audio] Groq sentiment error:', sentErr);
+                // Fallback to generic emotion based on keywords
+                if (flags.emotions.length > 0) {
+                    const emotionKeyword = flags.emotions[0].word.toLowerCase();
+                    if (emotionKeyword.includes('angry')) hybridEmotion = { label: 'Angry', score: 0.75, textSentiment: 'Angry' };
+                    else if (emotionKeyword.includes('sad')) hybridEmotion = { label: 'Sad', score: 0.75, textSentiment: 'Sad' };
+                    else if (emotionKeyword.includes('fear') || emotionKeyword.includes('scared')) hybridEmotion = { label: 'Fearful', score: 0.75, textSentiment: 'Fearful' };
+                }
             }
         }
 
-        if (!hybridEmotion && rawAcoustic) {
-            hybridEmotion = {
-                label: mappedAcoustic,
-                score: rawAcoustic.score,
-                acoustic: mappedAcoustic,
-                textSentiment: null
-            };
+        if (!hybridEmotion) {
+            hybridEmotion = { label: 'Uncertain', score: 0.5, textSentiment: null };
         }
 
         console.log('[Audio] Groq Transcription:', text);

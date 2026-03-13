@@ -82,7 +82,7 @@ export function PABDemo() {
           // POST to backend using the captured resident ID from when recording started
           const residentIdToSend = recordingResidentIdRef.current || 'PT001';
           console.log(`[PAB] Uploading audio for resident: ${residentIdToSend}`);
-          const response = await fetch('http://localhost:3000/api/audio/transcription', {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/audio/transcription`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
