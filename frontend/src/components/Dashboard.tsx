@@ -5,7 +5,7 @@ import { ActiveCallAnalysis } from './ActiveCallAnalysis';
 import { CaseLogsTable } from './CaseLogsTable';
 import { DashboardHeader } from './DashboardHeader';
 import { Resident, CallAnalysis, CaseLog } from '../types';
-import { fetchResidentById, fetchCallById, fetchCases, subscribeToCases } from '../services/firebaseService';
+import { fetchResidentById, fetchCallById, subscribeToCases } from '../services/firebaseService';
 
 export function Dashboard() {
   const location = useLocation();
